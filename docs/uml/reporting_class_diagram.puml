@@ -1,0 +1,256 @@
+@startuml
+title UML Class Diagram — Telegram Bot Construction Reporting (Pilot)
+
+skinparam classAttributeIconSize 0
+hide circle
+
+package "Presentation" {
+  class TelegramPollingHandler {
+    +handleUpdate(update: TelegramUpdate): void
+  }
+
+  class NotificationService {
+    +sendWelcome(chatId: string): void
+    +sendInputInstruction(chatId: string): void
+    +sendImmediateConfirmation(chatId: string, payload: ClassificationResult): void
+    +sendQueuedNotice(chatId: string): void
+    +sendPostFactumNotification(chatId: string): void
+  }
+}
+
+package "Application" {
+  class MessagePreprocessor {
+    +normalize(text: string): string
+  }
+
+  class ClassificationOrchestrator {
+    +classify(update: TelegramUpdate): DataFactRecord
+    +classifyFromQueue(task: QueueTask): DataFactRecord
+  }
+
+  class PromptBuilder {
+    +build(rawText: string, dict: ClassificationDictionary): string
+    +buildStageFunctionHint(): string
+  }
+
+  class JsonSchemaValidator {
+    +validate(resultJson: string): ValidationResult
+  }
+
+  class FallbackMapper {
+    +mapInvalid(rawLlmResponse: string, update: TelegramUpdate): ClassificationResult
+  }
+
+  class QueueService {
+    +enqueue(task: QueueTask): void
+    +dequeue(): QueueTask
+  }
+
+  class QueueWorker {
+    +process(task: QueueTask): void
+  }
+}
+
+package "Domain" {
+  class TelegramUpdate {
+    +chatId: string
+    +userId: string
+    +messageId: string
+    +rawText: string
+    +receivedAt: datetime
+  }
+
+  class ClassificationDictionary {
+    +workTypes: List<string>
+    +stages: List<string>
+    +functions: List<string>
+    +version: string
+  }
+
+  class ClassificationResult {
+    +volume: string?
+    +unit: string?
+    +workType: string?
+    +stage: string?
+    +function: string?
+    +comment: string?
+  }
+
+  class AuditFields {
+    +timestamp: datetime
+    +userId: string
+    +chatId: string
+    +messageId: string
+    +model: string
+    +classifierVersion: string
+    +status: ProcessingStatus
+  }
+
+  class DataFactRecord {
+    +rawText: string
+    +classification: ClassificationResult
+    +audit: AuditFields
+  }
+
+  class ValidationResult {
+    +isValid: bool
+    +errors: List<string>
+  }
+
+  class QueueTask {
+    +chatId: string
+    +messageId: string
+    +rawText: string
+    +enqueuedAt: datetime
+  }
+
+  enum ProcessingStatus {
+    QUEUED
+    PROCESSED
+    PROCESSED_WITH_FALLBACK
+    PROCESSED_FROM_QUEUE
+    PROCESSED_FROM_QUEUE_FALLBACK
+  }
+}
+
+package "Infrastructure" {
+  class DictionaryRepository {
+    +loadFromTextFiles(): ClassificationDictionary
+  }
+
+  class GeminiClient {
+    +classify(prompt: string, timeoutSeconds: int = 30): string
+  }
+
+  class GoogleSheetsRepository {
+    +appendDataFact(record: DataFactRecord): void
+  }
+}
+
+package "Observability" {
+  class LoggingService {
+    +info(event: LogEvent, context: LogContext): void
+    +warning(event: LogEvent, context: LogContext): void
+    +error(event: LogEvent, context: LogContext): void
+  }
+
+  class CorrelationIdFactory {
+    +buildTraceId(chatId: string, messageId: string): string
+  }
+
+  class LogContext {
+    +traceId: string
+    +chatId: string
+    +userId: string
+    +messageId: string
+    +processingPath: string
+    +status: ProcessingStatus
+    +component: string
+  }
+
+  class StructuredLogRecord {
+    +timestamp: datetime
+    +level: LogLevel
+    +event: LogEvent
+    +context: LogContext
+    +payload: Map<string, any>
+  }
+
+  enum LogEvent {
+    message_received
+    llm_response_received
+    llm_timeout
+    json_validation_passed
+    json_validation_failed
+    queue_enqueued
+    queue_dequeued
+    sheets_write_success
+    sheets_write_failed
+    post_factum_notification_sent
+  }
+
+  enum LogLevel {
+    INFO
+    WARNING
+    ERROR
+  }
+
+  class LogSink {
+    +emit(record: StructuredLogRecord): void
+  }
+}
+
+TelegramPollingHandler --> MessagePreprocessor
+TelegramPollingHandler --> ClassificationOrchestrator
+TelegramPollingHandler --> NotificationService
+TelegramPollingHandler --> LoggingService
+
+ClassificationOrchestrator --> DictionaryRepository
+ClassificationOrchestrator --> PromptBuilder
+ClassificationOrchestrator --> GeminiClient
+ClassificationOrchestrator --> JsonSchemaValidator
+ClassificationOrchestrator --> FallbackMapper
+ClassificationOrchestrator --> GoogleSheetsRepository
+ClassificationOrchestrator --> QueueService
+ClassificationOrchestrator --> LoggingService
+
+QueueWorker --> QueueService
+QueueWorker --> ClassificationOrchestrator
+QueueWorker --> NotificationService
+QueueWorker --> LoggingService
+
+GoogleSheetsRepository --> LoggingService
+NotificationService --> LoggingService
+
+LoggingService --> CorrelationIdFactory
+LoggingService --> LogSink
+LoggingService --> LogContext
+LoggingService --> LogEvent
+StructuredLogRecord *-- LogContext
+StructuredLogRecord --> LogLevel
+StructuredLogRecord --> LogEvent
+LogSink --> StructuredLogRecord
+
+PromptBuilder --> ClassificationDictionary
+JsonSchemaValidator --> ValidationResult
+FallbackMapper --> ClassificationResult
+
+DataFactRecord *-- ClassificationResult
+DataFactRecord *-- AuditFields
+AuditFields --> ProcessingStatus
+LogContext --> ProcessingStatus
+
+ClassificationOrchestrator --> DataFactRecord
+ClassificationOrchestrator --> TelegramUpdate
+ClassificationOrchestrator --> QueueTask
+QueueService --> QueueTask
+
+note right of JsonSchemaValidator
+  Strict JSON schema:
+  - workType/stage/function: single value or null
+  - invalid JSON -> full LLM response goes to comment
+end note
+
+note right of PromptBuilder
+  Pilot prompt includes explicit definitions:
+  - stage: process/project stage
+  - function: functional work block
+end note
+
+note right of LoggingService
+  Structured logs are required for pilot:
+  - message_received
+  - llm_response/timeout
+  - json_validation_result
+  - queue_enqueued/dequeued
+  - sheets_write_result
+  Gemini calls are made via google-genai SDK
+  See docs/logging/logging_spec.md
+end note
+
+note right of DataFactRecord
+  rawText is always persisted
+  (immediate and queue paths)
+end note
+
+@enduml

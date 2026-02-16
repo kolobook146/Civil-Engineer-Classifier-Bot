@@ -1,0 +1,145 @@
+@startuml
+title UML Activity — Telegram Bot Construction Reporting (Pilot)
+
+start
+
+partition User {
+  :Open chat with bot;
+  :Press /start (first time);
+}
+
+partition Bot {
+  :Send welcome message;
+}
+
+partition User {
+  :Press "Сообщить выполнение";
+}
+
+partition Bot {
+  :Send input instruction message;
+}
+
+partition User {
+  :Send free-form message about completed work;
+}
+
+partition Telegram {
+  :Receive Update (Polling);
+}
+
+partition Bot {
+  :Log event message_received
+(trace_id=chat_id:message_id, raw_text_length, raw_text_sha256);
+  :Preprocess text
+(trim, normalize spaces);
+  :Load dictionaries from text files
+(work_type, stage, function);
+  :Build Gemini request via google-genai SDK
+(dictionaries + full raw_text + stage/function definitions)
+  :Call Gemini via google-genai SDK (timeout 30 sec);
+}
+
+if (LLM replied in 30 sec?) then (yes)
+  partition Bot {
+    :Log event llm_response_received
+(llm_model, llm_latency_ms);
+    :Validate strict JSON schema
+(single value or null for work_type/stage/function);
+  }
+
+  if (JSON valid?) then (yes)
+    partition Bot {
+      :Log event json_validation_passed;
+      :Map structured fields from JSON;
+      :Set status = PROCESSED;
+    }
+  else (no)
+    partition Bot {
+      :Log event json_validation_failed
+(validation_errors_count, validation_errors);
+      :Put full raw LLM response into comment;
+      :Set status = PROCESSED_WITH_FALLBACK;
+    }
+  endif
+
+  partition GoogleSheets {
+    :Write row to data_facts:
+raw_text + extracted fields + audit fields
+(timestamp,user_id,chat_id,message_id,model,classifier_version,status);
+  }
+
+  partition Bot {
+    :Log event sheets_write_success
+(sheet_name=data_facts, row_index);
+    :Send message to user:
+"Внесли данные: {JSON}";
+  }
+  stop
+
+else (no)
+  partition Bot {
+    :Log event llm_timeout
+(timeout_seconds=30);
+    :Put message in queue;
+    :Set status = QUEUED;
+    :Log event queue_enqueued;
+    :Send message to user:
+"LLM занята, сообщение в очереди,
+как запишем - сообщим";
+  }
+
+  partition QueueWorker {
+    :Take queued message when worker runs;
+    :Log event queue_dequeued
+(queue_latency_ms);
+  }
+
+  partition Bot {
+    :Load dictionaries from text files;
+    :Build Gemini request via google-genai SDK
+(dictionaries + full raw_text + stage/function definitions)
+    :Call Gemini via google-genai SDK from queue worker;
+    :Log event llm_response_received;
+    :Validate strict JSON schema;
+  }
+
+  if (JSON valid in queue path?) then (yes)
+    partition Bot {
+      :Log event json_validation_passed;
+      :Map structured fields from JSON;
+      :Set status = PROCESSED_FROM_QUEUE;
+    }
+  else (no)
+    partition Bot {
+      :Log event json_validation_failed;
+      :Put full raw LLM response into comment;
+      :Set status = PROCESSED_FROM_QUEUE_FALLBACK;
+    }
+  endif
+
+  partition GoogleSheets {
+    :Write row to data_facts:
+raw_text + extracted fields + audit fields;
+  }
+
+  partition Bot {
+    :Log event sheets_write_success;
+    :Send post-factum notification:
+"Сообщение из очереди внесено";
+    :Log event post_factum_notification_sent;
+  }
+  stop
+endif
+
+note right
+  Structured logging contract:
+  docs/logging/logging_spec.md
+end note
+
+note left
+  On Google Sheets write error:
+  log event sheets_write_failed (ERROR)
+end note
+
+@enduml

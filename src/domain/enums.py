@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class ProcessingStatus(StrEnum):
+    RECEIVED = "RECEIVED"
+    QUEUED = "QUEUED"
+    PROCESSED = "PROCESSED"
+    PROCESSED_WITH_FALLBACK = "PROCESSED_WITH_FALLBACK"
+    PROCESSED_FROM_QUEUE = "PROCESSED_FROM_QUEUE"
+    PROCESSED_FROM_QUEUE_FALLBACK = "PROCESSED_FROM_QUEUE_FALLBACK"
