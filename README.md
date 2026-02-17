@@ -189,3 +189,61 @@ If the LLM does not respond within 30 seconds:
 4. With invalid JSON, raw LLM output is written to `comment`.
 5. On a 30-second timeout, the message is queued and later processed.
 6. After queue processing, the user receives a post-factum notification.
+
+## 11. Run Process
+
+### 11.1 Prerequisites
+
+- Python 3.11+
+- Telegram bot token
+- Gemini API key
+- Google service account JSON key file
+- Access granted to the target Google Sheets document for the service account
+
+### 11.2 Setup
+
+1. Install project dependencies:
+
+```bash
+python3 -m pip install -e .
+```
+
+2. Create environment file from template:
+
+```bash
+cp .env.example .env
+```
+
+3. Fill required values in `.env`:
+- `TG_BOT_TOKEN`
+- `LLM_API_KEY`
+- `GOOGLE_SHEETS_SPREADSHEET_ID`
+- `GOOGLE_SERVICE_ACCOUNT_FILE`
+
+### 11.3 Start the Services
+
+Run in two separate terminals from the project root.
+
+Terminal 1 (Telegram polling bot):
+
+```bash
+cd "/Users/kolobook/Documents/TG Build Bot"
+PYTHONPATH=src python3 src/main_polling.py
+```
+
+Terminal 2 (queue worker):
+
+```bash
+cd "/Users/kolobook/Documents/TG Build Bot"
+PYTHONPATH=src python3 src/main_queue_worker.py
+```
+
+### 11.4 Stop
+
+- Press `Ctrl + C` in each terminal.
+
+## 12. Contacts
+
+- Telegram: `@kolobook146`
+- E-mail: `galaxykolodkin@gmail.com`
+- Phone: `+7 (952) 652-09-07`
