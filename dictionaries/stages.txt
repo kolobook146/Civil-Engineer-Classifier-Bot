@@ -1,10 +1,10 @@
-Исходные данные
-Техническое задание
-Согласование
-Тендер
-Договор
-Проектно-изыскательские работы
-Авансирование
-Закупка
-Выполнение
-Контроль
+Initial data
+Technical brief
+Approvals
+Tender
+Contract
+Design and survey works
+Advance payment
+Procurement
+Execution
+Control

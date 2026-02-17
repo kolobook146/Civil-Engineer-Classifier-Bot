@@ -55,7 +55,7 @@ class TelegramPollingHandler:
     @staticmethod
     def _build_report_keyboard() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
-            [[InlineKeyboardButton(text="Сообщить выполнение", callback_data="report_execution")]]
+            [[InlineKeyboardButton(text="Report Progress", callback_data="report_execution")]]
         )
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

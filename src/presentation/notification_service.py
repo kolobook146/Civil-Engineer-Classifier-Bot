@@ -21,15 +21,16 @@ class NotificationService:
         self._logging_service = logging_service
         self._correlation_id_factory = correlation_id_factory
         self._welcome_text = (
-            "Привет! Я бот учета выполненных работ по строительному проекту. "
-            "Отправляйте факт выполнения в свободной форме, а я выделю объем, единицы, "
-            "вид работ, стадию, функцию и комментарий, затем внесу запись в таблицу. "
-            "Нажмите «Сообщить выполнение», чтобы начать."
+            "Hello! I am a bot for recording completed construction work. "
+            "Send a progress fact in free form, and I will extract volume, unit, "
+            "work type, stage, function, and comment, then write the record to the sheet. "
+            "Press \"Report Progress\" to begin."
         )
         self._input_instruction_text = (
-            "Опишите выполненные работы одним сообщением в свободной форме. "
-            "Пример: «Сделали двадцать кубов бетона, стадия монолит, функция генподряд, "
-            "комментарий: оси 3-5». Можно писать числа словами и разговорные единицы — я нормализую."
+            "Describe completed work in one free-form message. "
+            "Example: \"Completed twenty cubic meters of concrete in axes 3-5.\" "
+            "or \" Finished the tender for marketing activities \" "
+            "You may write numbers in words and informal units; I will normalize them."
         )
 
     async def send_welcome(
@@ -55,18 +56,18 @@ class NotificationService:
     ) -> None:
         formatted_payload = json.dumps(classification_payload, ensure_ascii=False)
         await target_message.reply_text(
-            f"Внесли данные: {formatted_payload}\n"
-            f"Статус: {status}"
+            f"Recorded data: {formatted_payload}\n"
+            f"Status: {status}"
         )
 
     async def send_processing_error(self, *, target_message: Message) -> None:
         await target_message.reply_text(
-            "Не удалось обработать сообщение. Попробуйте отправить его ещё раз."
+            "Failed to process the message. Please send it again."
         )
 
     async def send_queued_notice(self, *, target_message: Message) -> None:
         await target_message.reply_text(
-            "ЛЛМ занята, сообщение в очереди, как запишем - сообщим."
+            "LLM is busy, your message is queued. We will notify you once it is recorded."
         )
 
     async def send_post_factum_notification(
@@ -84,9 +85,9 @@ class NotificationService:
         await bot.send_message(
             chat_id=chat_ref,
             text=(
-                "Сообщение из очереди внесено.\n"
-                f"Внесли данные: {formatted_payload}\n"
-                f"Статус: {status}"
+                "Queued message has been recorded.\n"
+                f"Recorded data: {formatted_payload}\n"
+                f"Status: {status}"
             ),
         )
         self._logging_service.info(

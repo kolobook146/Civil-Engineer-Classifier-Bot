@@ -12,32 +12,32 @@ class PromptBuilder:
         functions = "\n".join(f"- {item}" for item in dictionary.functions)
 
         return (
-            "Ты классификатор фактов выполнения строительного проекта.\n"
-            "Верни только JSON без markdown и без пояснений.\n"
-            "Поля JSON: volume, unit, workType, stage, function, comment.\n"
-            "Для полей workType, stage, function допускается только одно значение из справочника или null.\n"
-            "Если поле отсутствует в сообщении, возвращай null.\n"
+            "You are a classifier of construction project progress facts.\n"
+            "Return JSON only, without markdown and without explanations.\n"
+            "JSON fields: volume, unit, workType, stage, function, comment.\n"
+            "For workType, stage, and function, only one dictionary value or null is allowed.\n"
+            "If a field is missing in the message, return null.\n"
             f"{self.build_stage_function_hint()}\n"
             "\n"
-            "Справочник видов работ:\n"
+            "Work type dictionary:\n"
             f"{work_types}\n"
             "\n"
-            "Справочник стадий:\n"
+            "Stage dictionary:\n"
             f"{stages}\n"
             "\n"
-            "Справочник функций:\n"
+            "Function dictionary:\n"
             f"{functions}\n"
             "\n"
-            "Исходное сообщение пользователя:\n"
+            "Original user message:\n"
             f"{raw_text}"
         )
 
     @staticmethod
     def build_stage_function_hint() -> str:
         return (
-            "Определения для пилота:\n"
-            "- stage: стадия процесса/проекта.\n"
-            "- function: функциональный блок работ."
+            "Pilot definitions:\n"
+            "- stage: process/project stage.\n"
+            "- function: functional work block."
         )
 
     def buildStageFunctionHint(self) -> str:

@@ -1,85 +1,95 @@
-# TG Build Bot
+# Civil Engineer's Classifier Bot
 
-Телеграм-бот для сбора фактов выполнения работ по строительному проекту в свободной форме, структурирования данных через LLM и записи в Google Sheets.
+A Telegram bot (@TavridaDevelopmentBot) that classifies any free-form project update into a strict, predefined lifecycle schedule structure for an investment construction project, based on a selected coding framework, and writes the data to Google Sheets.
 
-## 1. Цель проекта
+Google Sheets reference (pilot data dictionary):  
+https://docs.google.com/spreadsheets/d/17AASCMKd6DtSUjoheuF1MrPVm6iSzBHq--p7Rc4jd1s/edit?usp=sharing
 
-Создать пилотную систему, которая:
-- принимает от пользователей текстовые сообщения о выполненных работах;
-- извлекает структурированные поля по проектным справочникам;
-- сохраняет как структурированные данные, так и исходный текст;
-- уведомляет пользователя о результате обработки сразу или post-factum (если сообщение ушло в очередь).
+For the pilot, the baseline structure is built around three top-level coding groups:
+- Functions: typical functions required to deliver a project (Financing, Marketing, Design, Construction).
+- Stages: standardized stages used to produce results within each function (Terms of Reference, Tender, Contract, Procurement, Execution).
+- Work Types: first-level classification of construction and installation work types (Earthworks, Piling, Concreting, Electrical Installation Works, Landscaping, etc.).
 
-## 2. Область пилота
+This structure enables end-to-end analytics, cost control across project delivery, operational planning, and comparison of alternative development scenarios for management decision-making.
 
-В рамках пилота реализуется:
-- Telegram `polling` (не webhook);
-- классификация через LLM (Google Gemini `gemini-2.5-flash`) через нативный SDK `google-genai` с таймаутом 30 секунд;
-- строгая JSON-валидация ответа LLM перед записью;
-- fallback-логика при невалидном JSON;
-- запись в Google Sheets (`data_facts`);
-- очередь с отложенной обработкой и post-factum уведомлением.
+## 1. Project Goal
 
-Вне рамок пилота (post-pilot):
-- идемпотентность записи по уникальному ключу;
-- retry-политика 1/5/15 минут и DLQ;
-- логирование confidence и причин пустых полей;
-- операционный мониторинг (таймауты, размер очереди, ошибки записи).
-- расширение структуры справочников до полей `code`, `label`, `description` (сейчас используется только `label`).
+Build a pilot system that:
+- accepts user messages about completed work in free-form text;
+- extracts structured fields based on project dictionaries;
+- stores both structured data and the original message text;
+- notifies the user either immediately or post-factum (if the message is queued).
 
-## 3. Функциональные требования
+## 2. Pilot Scope
 
-### 3.1 Сценарий взаимодействия с пользователем
+In scope for the pilot:
+- Telegram `polling` (not webhook);
+- LLM classification using Google Gemini (`gemini-2.5-flash`) via the native `google-genai` SDK with a 30-second timeout;
+- strict JSON validation of the LLM output before persistence;
+- fallback logic for invalid JSON;
+- writing data to Google Sheets (`data_facts`);
+- a deferred-processing queue with post-factum user notification.
 
-1. Пользователь открывает чат с ботом.
-2. Пользователь нажимает `/start`.
-3. Бот отправляет приветственное сообщение и предлагает `Сообщить выполнение`.
-4. Пользователь нажимает `Сообщить выполнение`.
-5. Бот отправляет инструкцию по формату свободного ввода.
-6. Пользователь отправляет сообщение в свободной форме.
+Out of scope for the pilot (post-pilot):
+- idempotent writes by unique message key;
+- retry policy (1/5/15 minutes) and DLQ;
+- logging of confidence values and reasons for empty fields;
+- operational monitoring (timeouts, queue size, persistence errors);
+- dictionary schema expansion to `code`, `label`, `description` (currently only `label` is used).
 
-### 3.2 Обработка сообщения
+## 3. Functional Requirements
 
-1. Бот получает обновления через Telegram `polling`.
-2. Выполняется предобработка текста:
+### 3.1 User Interaction Flow
+
+1. The user opens a chat with the bot.
+2. The user presses `/start`.
+3. The bot sends a welcome message and offers `Report Progress`.
+4. The user presses `Report Progress`.
+5. The bot sends instructions for free-form input.
+6. The user submits a free-form message.
+
+### 3.2 Message Processing
+
+1. The bot receives updates via Telegram `polling`.
+2. Text preprocessing is applied:
    - `trim`;
-   - нормализация пробелов.
-3. Загружаются справочники из текстовых файлов проекта:
-   - виды работ;
-   - стадии;
-   - функции.
-4. Оркестратор формирует запрос в LLM (через `google-genai`):
-   - полный исходный текст (`raw_text`);
-   - содержимое справочников;
-   - инструкция вернуть строго структурированный JSON;
-   - для пилота: явное пояснение в prompt, что `stage` = стадия процесса, `function` = функциональный блок работ.
-5. Вызов Gemini через `google-genai` выполняется с таймаутом 30 секунд.
+   - whitespace normalization.
+3. Dictionaries are loaded from project text files:
+   - work types;
+   - stages;
+   - functions.
+4. The orchestrator builds the LLM request (via `google-genai`) with:
+   - full original text (`raw_text`);
+   - dictionary content;
+   - instructions to return strictly structured JSON;
+   - pilot-specific prompt clarification: `stage` = process/project stage, `function` = functional work block.
+5. Gemini is called through `google-genai` with a 30-second timeout.
 
-### 3.3 Правила классификации
+### 3.3 Classification Rules
 
-LLM должна вернуть JSON с полями:
-- `volume` (опционально, для пилота тип string);
-- `unit` (опционально);
-- `workType` (одно значение из справочника или `null`);
-- `stage` (одно значение из справочника или `null`);
-- `function` (одно значение из справочника или `null`);
-- `comment` (нераспределенный текст или `null`).
+The LLM must return JSON with the following fields:
+- `volume` (optional, `string` in the pilot);
+- `unit` (optional);
+- `workType` (one dictionary value or `null`);
+- `stage` (one dictionary value or `null`);
+- `function` (one dictionary value or `null`);
+- `comment` (unmapped/free text or `null`).
 
-### 3.4 Валидация и fallback
+### 3.4 Validation and Fallback
 
-1. Ответ LLM валидируется по строгой JSON-схеме.
-2. Если JSON валиден:
-   - формируется запись со статусом `PROCESSED`.
-3. Если JSON невалиден:
-   - полный ответ LLM сохраняется в поле `comment`;
-   - запись помечается статусом `PROCESSED_WITH_FALLBACK`.
+1. LLM output is validated against a strict JSON schema.
+2. If JSON is valid:
+   - a record is created with status `PROCESSED`.
+3. If JSON is invalid:
+   - the full LLM output is stored in `comment`;
+   - the record is marked as `PROCESSED_WITH_FALLBACK`.
 
-### 3.5 Запись в Google Sheets
+### 3.5 Google Sheets Persistence
 
-Запись идет в лист `data_facts` и всегда включает:
-- `raw_text` (обязательно);
-- поля классификации;
-- аудит-поля:
+Data is written to the `data_facts` sheet and always includes:
+- `raw_text` (required);
+- classification fields;
+- audit fields:
   - `timestamp`,
   - `user_id`,
   - `chat_id`,
@@ -88,94 +98,94 @@ LLM должна вернуть JSON с полями:
   - `classifier_version`,
   - `status`.
 
-### 3.6 Очередь и отложенная обработка
+### 3.6 Queue and Deferred Processing
 
-Если LLM не отвечает в течение 30 секунд:
-1. Сообщение ставится в очередь со статусом `QUEUED`.
-2. Пользователь получает уведомление: сообщение в очереди.
-3. Queue worker обрабатывает сообщение позже по тому же контуру:
-   - LLM -> валидация -> fallback (при необходимости) -> запись в `data_facts`.
-4. После успешной записи пользователь получает post-factum уведомление:
-   - `Сообщение из очереди внесено`.
+If the LLM does not respond within 30 seconds:
+1. The message is queued with status `QUEUED`.
+2. The user is notified that the message is queued.
+3. A queue worker processes the message later via the same pipeline:
+   - LLM -> validation -> fallback (if needed) -> write to `data_facts`.
+4. After successful persistence, the user receives a post-factum notification:
+   - `Queued message has been recorded`.
 
-## 4. Нефункциональные требования
+## 4. Non-Functional Requirements
 
-### 4.1 Надежность
+### 4.1 Reliability
 
-- Сообщение не должно теряться при таймауте LLM.
-- `raw_text` должен сохраняться всегда, даже при неполном/ошибочном парсинге.
-- Очередь должна обеспечивать последующую обработку отложенных сообщений.
+- Messages must not be lost when LLM timeouts occur.
+- `raw_text` must always be persisted, even with partial or failed parsing.
+- The queue must guarantee eventual processing of deferred messages.
 
-### 4.2 Производительность
+### 4.2 Performance
 
-- Таймаут онлайн-вызова LLM: 30 секунд.
-- При превышении таймаута система обязана быстро вернуть пользователю статус о постановке в очередь.
+- Online LLM timeout: 30 seconds.
+- If timeout is exceeded, the system must quickly return a queued status to the user.
 
-### 4.3 Качество данных
+### 4.3 Data Quality
 
-- Строгая валидация JSON перед записью.
-- Поля `workType`, `stage`, `function` должны быть single-value (`одно значение или null`).
+- Strict JSON validation before persistence.
+- `workType`, `stage`, and `function` must be single-value (`one value or null`).
 
-### 4.4 Поддерживаемость
+### 4.4 Maintainability
 
-- Справочники должны обновляться без изменения кода (через текстовые файлы).
-- Версия классификатора (`classifier_version`) фиксируется в каждой записи.
+- Dictionaries must be updatable without code changes (via text files).
+- Classifier version (`classifier_version`) must be stored in every record.
 
-### 4.5 Наблюдаемость (минимум пилота)
+### 4.5 Observability (Pilot Baseline)
 
-- Логируются ключевые события:
-  - получение сообщения,
-  - ответ/таймаут LLM,
-  - результат валидации,
-  - факт записи в Google Sheets,
-  - постановка и снятие из очереди.
-- Подробная спецификация логгирования: `docs/logging/logging_spec.md`.
+- Key events are logged:
+  - message received,
+  - LLM response/timeout,
+  - validation result,
+  - Google Sheets write result,
+  - queue enqueue/dequeue.
+- Detailed logging specification: `docs/logging/logging_spec.md`.
 
-## 5. Целевая аудитория
+## 5. Target Audience
 
-- Руководители строительных проектов.
-- Прорабы и мастера на площадке.
-- Инженеры ПТО/аналитики, которым нужен оперативный учет фактов выполнения.
-- Участники проекта, вносящие ежедневные/сменные отчеты через Telegram.
+- Construction project managers.
+- Site supervisors and foremen.
+- Technical office engineers/analysts who need operational progress tracking.
+- Project participants submitting daily/shift reports via Telegram.
 
-## 6. Платформы
+## 6. Platforms
 
-- Клиент: Telegram (iOS, Android, Desktop, Web).
-- Серверная часть: Python-сервис (Linux/macOS).
-- Интеграция хранения: Google Sheets API.
-- LLM-провайдер: Google Gemini API (`gemini-2.5-flash`) через нативный SDK `google-genai`.
+- Client: Telegram (iOS, Android, Desktop, Web).
+- Backend: Python service (Linux/macOS).
+- Storage integration: Google Sheets API.
+- LLM provider: Google Gemini API (`gemini-2.5-flash`) via native `google-genai` SDK.
 
-## 7. Ограничения пилота
+## 7. Pilot Constraints
 
-- Только `polling` (без webhook).
-- Без ролей и разграничения доступа.
-- Без редактирования/отмены ранее внесенных записей.
-- Без дедупликации `chat_id + message_id`.
-- Без справочника нормализации единиц измерения (вариативность оставляется LLM).
-- `volume` хранится как `string` в пилоте.
+- `polling` only (no webhook).
+- No roles or access control.
+- No edit/cancel flow for previously recorded entries.
+- No deduplication by `chat_id + message_id`.
+- No unit-normalization dictionary (variation is left to the LLM).
+- `volume` is stored as `string` in the pilot.
 
-## 8. Предпочтительные технологии
+## 8. Preferred Technologies
 
-- Язык: Python 3.11+.
-- Telegram: `python-telegram-bot` (polling-режим).
-- Валидация схем: `jsonschema` или `pydantic`.
-- LLM SDK: `google-genai` (нативный Gemini SDK).
-- Google Sheets: `gspread` + сервисный аккаунт Google.
-- Очередь пилота: SQLite/файловая очередь + отдельный worker-процесс.
-- Логирование: стандартный `logging` (JSON-формат логов предпочтителен).
+- Language: Python 3.11+.
+- Telegram: `python-telegram-bot` (polling mode).
+- Schema validation: `jsonschema` or `pydantic`.
+- LLM SDK: `google-genai` (native Gemini SDK).
+- Google Sheets: `gspread` + Google service account.
+- Pilot queue: SQLite/file-backed queue + separate worker process.
+- Logging: standard `logging` (JSON logs preferred).
 
-## 9. Артефакты архитектуры
+## 9. Architecture Artifacts
 
 - BPMN: `docs/bpmn/reporting_flow.bpmn`
 - UML Activity: `docs/uml/reporting_activity.puml`
 - UML Class: `docs/uml/reporting_class_diagram.puml`
 - Logging spec: `docs/logging/logging_spec.md`
 
-## 10. Критерии приемки пилота
+## 10. Pilot Acceptance Criteria
 
-1. Сообщение пользователя в свободной форме попадает в `data_facts`.
-2. В `data_facts` всегда присутствует `raw_text`.
-3. При валидном JSON поля корректно заполнены по схеме.
-4. При невалидном JSON сырой ответ LLM попадает в `comment`.
-5. При таймауте 30 секунд сообщение ставится в очередь и затем обрабатывается.
-6. После обработки из очереди пользователь получает post-factum уведомление.
+1. A user free-form message is persisted to `data_facts`.
+2. `raw_text` is always present in `data_facts`.
+3. With valid JSON, fields are correctly populated according to the schema.
+4. With invalid JSON, raw LLM output is written to `comment`.
+5. On a 30-second timeout, the message is queued and later processed.
+6. After queue processing, the user receives a post-factum notification.

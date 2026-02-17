@@ -1,24 +1,24 @@
-Земляные работы
-Сваи
-Фундамент
-Гидроизоляция
-Бетонирование
-Металлоконструкции
-Кровля
-Ограждающие конструкции
-Внутренние стены и перегородки
-Окна
-Фасад
-Двери
-Лифты
-Электроснабжение
-Слаботочные сети
-Водоснабжение
-Канализация
-Отопление
-Вентиляция
-Кондиционирование
-Газоснабжение
-Черновая отделка
-Чистовая отделка
-Благоустройство
+Earthworks
+Piling
+Foundation works
+Waterproofing
+Concreting
+Steel structures
+Roofing
+Building envelope
+Internal walls and partitions
+Windows
+Facade works
+Doors
+Elevators
+Power supply
+Low-current systems
+Water supply
+Sewerage
+Heating
+Ventilation
+Air conditioning
+Gas supply
+Rough finishing
+Final finishing
+Landscaping

@@ -55,7 +55,7 @@
     <bpmn:userTask id="User_OpenChat" name="Open chat with bot"/>
     <bpmn:userTask id="User_PressStart" name="Press /start (first time)"/>
     <bpmn:serviceTask id="Bot_SendWelcome" name="Send welcome message"/>
-    <bpmn:userTask id="User_PressReport" name="Press button: Сообщить выполнение"/>
+    <bpmn:userTask id="User_PressReport" name="Press button: Report Progress"/>
     <bpmn:serviceTask id="Bot_SendInputInstruction" name="Send free-form input instruction"/>
     <bpmn:userTask id="User_SendFreeText" name="Send free-form work report"/>
     <bpmn:serviceTask id="Telegram_ReceivePolling" name="Receive Update (Polling)"/>
@@ -71,7 +71,7 @@
     <bpmn:serviceTask id="Bot_MapValidPayload_Immediate" name="Build payload from valid JSON (status=PROCESSED)"/>
     <bpmn:serviceTask id="Bot_MapFallbackPayload_Immediate" name="Fallback: put full LLM response into comment (status=PROCESSED_WITH_FALLBACK)"/>
     <bpmn:serviceTask id="Sheets_WriteDataFacts_Immediate" name="Write to data_facts: parsed fields + raw_text + audit fields + log sheets_write_success/failed"/>
-    <bpmn:serviceTask id="Bot_SendImmediateConfirmation" name="Notify user: внесли данные: {JSON}"/>
+    <bpmn:serviceTask id="Bot_SendImmediateConfirmation" name="Notify user: recorded data: {JSON}"/>
 
     <bpmn:serviceTask id="Bot_EnqueueMessage" name="Put message into queue (status=QUEUED) + log queue_enqueued"/>
     <bpmn:serviceTask id="Bot_SendQueueNotice" name="Notify user: LLM busy, message queued"/>

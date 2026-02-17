@@ -13,7 +13,7 @@ partition Bot {
 }
 
 partition User {
-  :Press "Сообщить выполнение";
+  :Press "Report Progress";
 }
 
 partition Bot {
@@ -73,7 +73,7 @@ raw_text + extracted fields + audit fields
     :Log event sheets_write_success
 (sheet_name=data_facts, row_index);
     :Send message to user:
-"Внесли данные: {JSON}";
+"Recorded data: {JSON}";
   }
   stop
 
@@ -85,8 +85,8 @@ else (no)
     :Set status = QUEUED;
     :Log event queue_enqueued;
     :Send message to user:
-"LLM занята, сообщение в очереди,
-как запишем - сообщим";
+"LLM is busy, message queued.
+We will notify you after it is recorded.";
   }
 
   partition QueueWorker {
@@ -126,7 +126,7 @@ raw_text + extracted fields + audit fields;
   partition Bot {
     :Log event sheets_write_success;
     :Send post-factum notification:
-"Сообщение из очереди внесено";
+"Queued message has been recorded";
     :Log event post_factum_notification_sent;
   }
   stop
