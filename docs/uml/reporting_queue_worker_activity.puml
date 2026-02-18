@@ -1,0 +1,98 @@
+@startuml
+title UML Activity - TG Build Bot Queue Worker Flow (Pilot)
+
+start
+
+partition QueueWorkerProcess {
+  :Log event queue_worker_bootstrap_started;
+  :Log event queue_worker_started;
+  :Polling tick (QUEUE_POLL_INTERVAL_SECONDS);
+  :Dequeue oldest pending queue task;
+}
+
+if (Task found?) then (yes)
+  if (queue_id present?) then (yes)
+    partition QueueWorker {
+      :Log event queue_dequeued;
+      :Build TelegramMessageMeta;
+      :Load dictionaries from text files;
+      :Build Gemini prompt from queued payload;
+      :Call Gemini via google-genai SDK;
+    }
+
+    if (Gemini call successful?) then (yes)
+      partition QueueWorker {
+        :Log event llm_response_received;
+        :Validate JSON schema + dictionary constraints;
+      }
+
+      if (JSON valid?) then (yes)
+        partition QueueWorker {
+          :Log event json_validation_passed;
+          :Set status = PROCESSED_FROM_QUEUE;
+        }
+      else (no)
+        partition QueueWorker {
+          :Log event json_validation_failed;
+          :Fallback mapper - full raw LLM response in comment;
+          :Set status = PROCESSED_FROM_QUEUE_FALLBACK;
+        }
+      endif
+
+      partition GoogleSheets {
+        :Append row to data_facts;
+      }
+
+      if (Sheets write successful?) then (yes)
+        partition QueueWorker {
+          :Log event sheets_write_success;
+          :Mark queue task done;
+          :Send post-factum notification;
+          :Log event post_factum_notification_sent;
+        }
+      else (no)
+        partition QueueWorker {
+          :Requeue task;
+          :Log event queue_processing_failed;
+        }
+      endif
+
+    else (no)
+      if (Timeout?) then (yes)
+        partition QueueWorker {
+          :Log event llm_timeout;
+          :Requeue task (llm_timeout);
+          :Log event queue_enqueued (requeue_reason=llm_timeout);
+        }
+      else (error)
+        partition QueueWorker {
+          :Requeue task;
+          :Log event queue_processing_failed;
+        }
+      endif
+    endif
+
+  else (no)
+    partition QueueWorker {
+      :Log event queue_task_invalid;
+    }
+  endif
+
+else (no)
+  partition QueueWorker {
+    :No pending task on this poll tick;
+  }
+endif
+
+stop
+
+note right
+  This activity describes one queue-worker iteration.
+  In runtime this loop repeats forever with sleep
+  between polling ticks.
+
+  Structured logging contract:
+  docs/logging/logging_spec.md
+end note
+
+@enduml

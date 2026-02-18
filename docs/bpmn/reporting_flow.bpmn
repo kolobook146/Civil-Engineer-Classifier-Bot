@@ -6,428 +6,425 @@
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   id="Definitions_ConstructionReportBot"
                   targetNamespace="https://example.local/bpmn/construction-report-bot">
-  <bpmn:process id="Process_ConstructionReportBot" name="Construction Report Telegram Bot (Pilot)" isExecutable="false">
+
+  <bpmn:process id="Process_ConstructionReportBot" name="Construction Report Telegram Bot (Pilot, polling + queue worker)" isExecutable="false">
     <bpmn:laneSet id="LaneSet_Main">
       <bpmn:lane id="Lane_User" name="User">
-        <bpmn:flowNodeRef>Start_OpenChat</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start_UserOpensChat</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>User_OpenChat</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>User_PressStart</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>User_PressReport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>User_PressReportProgress</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>User_SendFreeText</bpmn:flowNodeRef>
       </bpmn:lane>
+
       <bpmn:lane id="Lane_Telegram" name="Telegram">
-        <bpmn:flowNodeRef>Telegram_ReceivePolling</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>TG_ReceivePollingUpdate</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Bot" name="Bot Backend">
+
+      <bpmn:lane id="Lane_Bot" name="Bot Backend (Online Path)">
         <bpmn:flowNodeRef>Bot_SendWelcome</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_SendInputInstruction</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_PreprocessText</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_LoadDictionaries</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_BuildLLMRequest</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_CallLLM_30s</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_LLMRepliedIn30s</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_ValidateJSONSchema</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_JSONValid_Immediate</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_MapValidPayload_Immediate</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_MapFallbackPayload_Immediate</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_SendImmediateConfirmation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_LoadDictionariesOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_BuildPromptOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_CallGeminiOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_OnlineLlmReplied</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_ValidateJsonOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_OnlineJsonValid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_MapValidOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_MapFallbackOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_CreateQueueTask</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_EnqueueMessage</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_SendQueueNotice</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MessageReady</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_LoadDictionaries</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_BuildLLMRequest</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_CallLLM</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_ValidateJSONSchema</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_JSONValid_Queue</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MapValidPayload</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MapFallbackPayload</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_EnqueueSucceeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendQueuedNotice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendImmediateConfirmation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendProcessingError</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_SendPostFactumNotification</bpmn:flowNodeRef>
       </bpmn:lane>
+
+      <bpmn:lane id="Lane_QueueWorker" name="Queue Worker (Deferred Path)">
+        <bpmn:flowNodeRef>Queue_MessageReady</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_PickPendingMessage</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_LoadDictionaries</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_BuildPrompt</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_CallGemini</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_QueueLlmTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_ValidateJson</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_QueueJsonValid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_MapValid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_MapFallback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_MarkDone</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_RequeueOnTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_RequeueOnProcessingError</bpmn:flowNodeRef>
+      </bpmn:lane>
+
       <bpmn:lane id="Lane_Sheets" name="Google Sheets">
-        <bpmn:flowNodeRef>Sheets_WriteDataFacts_Immediate</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Sheets_WriteDataFacts_Queue</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_ImmediateDone</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sheets_WriteOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_OnlineSheetsWriteSucceeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sheets_WriteQueue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_QueueSheetsWriteSucceeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_OnlineQueued</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_OnlineDone</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_OnlineFailed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_QueueDeferred</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>End_QueuedDone</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
 
-    <bpmn:startEvent id="Start_OpenChat" name="User opens bot chat"/>
+    <bpmn:startEvent id="Start_UserOpensChat" name="User opens bot chat"/>
     <bpmn:userTask id="User_OpenChat" name="Open chat with bot"/>
     <bpmn:userTask id="User_PressStart" name="Press /start (first time)"/>
-    <bpmn:serviceTask id="Bot_SendWelcome" name="Send welcome message"/>
-    <bpmn:userTask id="User_PressReport" name="Press button: Report Progress"/>
+    <bpmn:serviceTask id="Bot_SendWelcome" name="Send welcome message + button Report Progress"/>
+    <bpmn:userTask id="User_PressReportProgress" name="Press button: Report Progress"/>
     <bpmn:serviceTask id="Bot_SendInputInstruction" name="Send free-form input instruction"/>
-    <bpmn:userTask id="User_SendFreeText" name="Send free-form work report"/>
-    <bpmn:serviceTask id="Telegram_ReceivePolling" name="Receive Update (Polling)"/>
+    <bpmn:userTask id="User_SendFreeText" name="Send free-form progress message"/>
+    <bpmn:serviceTask id="TG_ReceivePollingUpdate" name="Receive Update (Polling)"/>
 
     <bpmn:serviceTask id="Bot_PreprocessText" name="Preprocess text: trim + normalize spaces + log message_received"/>
-    <bpmn:serviceTask id="Bot_LoadDictionaries" name="Load dictionaries from text files (project folder)"/>
-    <bpmn:serviceTask id="Bot_BuildLLMRequest" name="Build Gemini request via google-genai SDK: dictionaries + full raw_text + stage/function definitions"/>
-    <bpmn:serviceTask id="Bot_CallLLM_30s" name="Call Gemini via google-genai SDK (timeout: 30 seconds) + log llm_response_received/llm_timeout"/>
-    <bpmn:exclusiveGateway id="Gateway_LLMRepliedIn30s" name="LLM replied in 30 seconds?"/>
+    <bpmn:serviceTask id="Bot_LoadDictionariesOnline" name="Load dictionaries from text files (work types/stages/functions)"/>
+    <bpmn:serviceTask id="Bot_BuildPromptOnline" name="Build Gemini prompt: dictionaries + normalized/raw text"/>
+    <bpmn:serviceTask id="Bot_CallGeminiOnline" name="Call Gemini (timeout 30s) + log llm_response_received/llm_timeout"/>
+    <bpmn:exclusiveGateway id="Gateway_OnlineLlmReplied" name="Gemini call outcome?"/>
 
-    <bpmn:serviceTask id="Bot_ValidateJSONSchema" name="Validate strict JSON schema (single value or null for work_type/stage/function) + log json_validation_passed/failed"/>
-    <bpmn:exclusiveGateway id="Gateway_JSONValid_Immediate" name="JSON valid?"/>
-    <bpmn:serviceTask id="Bot_MapValidPayload_Immediate" name="Build payload from valid JSON (status=PROCESSED)"/>
-    <bpmn:serviceTask id="Bot_MapFallbackPayload_Immediate" name="Fallback: put full LLM response into comment (status=PROCESSED_WITH_FALLBACK)"/>
-    <bpmn:serviceTask id="Sheets_WriteDataFacts_Immediate" name="Write to data_facts: parsed fields + raw_text + audit fields + log sheets_write_success/failed"/>
-    <bpmn:serviceTask id="Bot_SendImmediateConfirmation" name="Notify user: recorded data: {JSON}"/>
+    <bpmn:serviceTask id="Bot_ValidateJsonOnline" name="Validate JSON schema + dictionary constraints"/>
+    <bpmn:exclusiveGateway id="Gateway_OnlineJsonValid" name="JSON valid?"/>
+    <bpmn:serviceTask id="Bot_MapValidOnline" name="Map valid payload (status=PROCESSED) + log json_validation_passed"/>
+    <bpmn:serviceTask id="Bot_MapFallbackOnline" name="Map fallback payload (status=PROCESSED_WITH_FALLBACK) + log json_validation_failed"/>
+    <bpmn:serviceTask id="Sheets_WriteOnline" name="Write data_facts: raw_text + classification + audit fields"/>
+    <bpmn:exclusiveGateway id="Gateway_OnlineSheetsWriteSucceeded" name="Sheets write succeeded?"/>
+    <bpmn:serviceTask id="Bot_SendImmediateConfirmation" name="Notify user: Recorded data + Status"/>
 
-    <bpmn:serviceTask id="Bot_EnqueueMessage" name="Put message into queue (status=QUEUED) + log queue_enqueued"/>
-    <bpmn:serviceTask id="Bot_SendQueueNotice" name="Notify user: LLM busy, message queued"/>
-    <bpmn:intermediateCatchEvent id="Queue_MessageReady" name="Queue worker picks message + log queue_dequeued">
+    <bpmn:serviceTask id="Bot_CreateQueueTask" name="Create queue task (raw_text + normalized_text + message metadata)"/>
+    <bpmn:serviceTask id="Bot_EnqueueMessage" name="Enqueue message (status=QUEUED) + log queue_enqueued"/>
+    <bpmn:exclusiveGateway id="Gateway_EnqueueSucceeded" name="Enqueue succeeded?"/>
+    <bpmn:serviceTask id="Bot_SendQueuedNotice" name="Notify user: LLM is busy, message queued"/>
+    <bpmn:serviceTask id="Bot_SendProcessingError" name="Notify user: processing failed, please retry"/>
+
+    <bpmn:startEvent id="Queue_MessageReady" name="Queue worker picks pending task (polling tick)">
       <bpmn:messageEventDefinition id="MessageEvent_QueueReady"/>
-    </bpmn:intermediateCatchEvent>
+    </bpmn:startEvent>
 
-    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue worker: load dictionaries from text files"/>
-    <bpmn:serviceTask id="Queue_BuildLLMRequest" name="Queue worker: build Gemini request via google-genai SDK with raw_text + stage/function definitions"/>
-    <bpmn:serviceTask id="Queue_CallLLM" name="Queue worker: call Gemini via google-genai SDK"/>
-    <bpmn:serviceTask id="Queue_ValidateJSONSchema" name="Queue worker: validate strict JSON schema"/>
-    <bpmn:exclusiveGateway id="Gateway_JSONValid_Queue" name="JSON valid (queue)?"/>
-    <bpmn:serviceTask id="Queue_MapValidPayload" name="Queue worker: build payload (status=PROCESSED_FROM_QUEUE)"/>
-    <bpmn:serviceTask id="Queue_MapFallbackPayload" name="Queue fallback: full LLM response into comment (status=PROCESSED_FROM_QUEUE_FALLBACK)"/>
-    <bpmn:serviceTask id="Sheets_WriteDataFacts_Queue" name="Write to data_facts: parsed fields + raw_text + audit fields + log sheets_write_success/failed"/>
-    <bpmn:serviceTask id="Bot_SendPostFactumNotification" name="Post-factum notify user: queued message recorded + log post_factum_notification_sent"/>
+    <bpmn:serviceTask id="Queue_PickPendingMessage" name="Pick oldest pending queue item (recover processing->pending on startup)"/>
+    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue worker: load dictionaries"/>
+    <bpmn:serviceTask id="Queue_BuildPrompt" name="Queue worker: build Gemini prompt"/>
+    <bpmn:serviceTask id="Queue_CallGemini" name="Queue worker: call Gemini"/>
+    <bpmn:exclusiveGateway id="Gateway_QueueLlmTimeout" name="Queue Gemini call outcome?"/>
+    <bpmn:serviceTask id="Queue_RequeueOnTimeout" name="Requeue task (reason=llm_timeout) + log queue_enqueued"/>
 
-    <bpmn:endEvent id="End_ImmediateDone" name="Done (immediate)"/>
-    <bpmn:endEvent id="End_QueuedDone" name="Done (after queue)"/>
+    <bpmn:serviceTask id="Queue_ValidateJson" name="Queue worker: validate JSON schema + dictionary constraints"/>
+    <bpmn:exclusiveGateway id="Gateway_QueueJsonValid" name="Queue JSON valid?"/>
+    <bpmn:serviceTask id="Queue_MapValid" name="Map valid payload (status=PROCESSED_FROM_QUEUE)"/>
+    <bpmn:serviceTask id="Queue_MapFallback" name="Map fallback payload (status=PROCESSED_FROM_QUEUE_FALLBACK)"/>
 
-    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_OpenChat" targetRef="User_OpenChat"/>
+    <bpmn:serviceTask id="Sheets_WriteQueue" name="Queue worker: write data_facts"/>
+    <bpmn:exclusiveGateway id="Gateway_QueueSheetsWriteSucceeded" name="Queue write succeeded?"/>
+    <bpmn:serviceTask id="Queue_MarkDone" name="Mark queue task done (delete from queue)"/>
+    <bpmn:serviceTask id="Bot_SendPostFactumNotification" name="Send post-factum notification + log post_factum_notification_sent"/>
+    <bpmn:serviceTask id="Queue_RequeueOnProcessingError" name="Requeue task + log queue_processing_failed"/>
+
+    <bpmn:endEvent id="End_OnlineQueued" name="Done (queued for deferred processing)"/>
+    <bpmn:endEvent id="End_OnlineDone" name="Done (online)"/>
+    <bpmn:endEvent id="End_OnlineFailed" name="Done (online error)"/>
+    <bpmn:endEvent id="End_QueueDeferred" name="Done (requeued for later retry)"/>
+    <bpmn:endEvent id="End_QueuedDone" name="Done (processed from queue)"/>
+
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_UserOpensChat" targetRef="User_OpenChat"/>
     <bpmn:sequenceFlow id="Flow_02" sourceRef="User_OpenChat" targetRef="User_PressStart"/>
     <bpmn:sequenceFlow id="Flow_03" sourceRef="User_PressStart" targetRef="Bot_SendWelcome"/>
-    <bpmn:sequenceFlow id="Flow_04" sourceRef="Bot_SendWelcome" targetRef="User_PressReport"/>
-    <bpmn:sequenceFlow id="Flow_05" sourceRef="User_PressReport" targetRef="Bot_SendInputInstruction"/>
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Bot_SendWelcome" targetRef="User_PressReportProgress"/>
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="User_PressReportProgress" targetRef="Bot_SendInputInstruction"/>
     <bpmn:sequenceFlow id="Flow_06" sourceRef="Bot_SendInputInstruction" targetRef="User_SendFreeText"/>
-    <bpmn:sequenceFlow id="Flow_07" sourceRef="User_SendFreeText" targetRef="Telegram_ReceivePolling"/>
-    <bpmn:sequenceFlow id="Flow_08" sourceRef="Telegram_ReceivePolling" targetRef="Bot_PreprocessText"/>
-    <bpmn:sequenceFlow id="Flow_09" sourceRef="Bot_PreprocessText" targetRef="Bot_LoadDictionaries"/>
-    <bpmn:sequenceFlow id="Flow_10" sourceRef="Bot_LoadDictionaries" targetRef="Bot_BuildLLMRequest"/>
-    <bpmn:sequenceFlow id="Flow_11" sourceRef="Bot_BuildLLMRequest" targetRef="Bot_CallLLM_30s"/>
-    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bot_CallLLM_30s" targetRef="Gateway_LLMRepliedIn30s"/>
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="User_SendFreeText" targetRef="TG_ReceivePollingUpdate"/>
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="TG_ReceivePollingUpdate" targetRef="Bot_PreprocessText"/>
 
-    <bpmn:sequenceFlow id="Flow_13_yes" sourceRef="Gateway_LLMRepliedIn30s" targetRef="Bot_ValidateJSONSchema" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_13_no" sourceRef="Gateway_LLMRepliedIn30s" targetRef="Bot_EnqueueMessage" name="No"/>
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Bot_PreprocessText" targetRef="Bot_LoadDictionariesOnline"/>
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Bot_LoadDictionariesOnline" targetRef="Bot_BuildPromptOnline"/>
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Bot_BuildPromptOnline" targetRef="Bot_CallGeminiOnline"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bot_CallGeminiOnline" targetRef="Gateway_OnlineLlmReplied"/>
 
-    <bpmn:sequenceFlow id="Flow_14" sourceRef="Bot_ValidateJSONSchema" targetRef="Gateway_JSONValid_Immediate"/>
-    <bpmn:sequenceFlow id="Flow_15_yes" sourceRef="Gateway_JSONValid_Immediate" targetRef="Bot_MapValidPayload_Immediate" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_15_no" sourceRef="Gateway_JSONValid_Immediate" targetRef="Bot_MapFallbackPayload_Immediate" name="No"/>
-    <bpmn:sequenceFlow id="Flow_16a" sourceRef="Bot_MapValidPayload_Immediate" targetRef="Sheets_WriteDataFacts_Immediate"/>
-    <bpmn:sequenceFlow id="Flow_16b" sourceRef="Bot_MapFallbackPayload_Immediate" targetRef="Sheets_WriteDataFacts_Immediate"/>
-    <bpmn:sequenceFlow id="Flow_17" sourceRef="Sheets_WriteDataFacts_Immediate" targetRef="Bot_SendImmediateConfirmation"/>
-    <bpmn:sequenceFlow id="Flow_18" sourceRef="Bot_SendImmediateConfirmation" targetRef="End_ImmediateDone"/>
+    <bpmn:sequenceFlow id="Flow_13_yes" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_ValidateJsonOnline" name="Success"/>
+    <bpmn:sequenceFlow id="Flow_13_no" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_CreateQueueTask" name="Timeout"/>
+    <bpmn:sequenceFlow id="Flow_13_error" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_SendProcessingError" name="Error"/>
 
-    <bpmn:sequenceFlow id="Flow_19" sourceRef="Bot_EnqueueMessage" targetRef="Bot_SendQueueNotice"/>
-    <bpmn:sequenceFlow id="Flow_20" sourceRef="Bot_SendQueueNotice" targetRef="Queue_MessageReady"/>
-    <bpmn:sequenceFlow id="Flow_21" sourceRef="Queue_MessageReady" targetRef="Queue_LoadDictionaries"/>
-    <bpmn:sequenceFlow id="Flow_22" sourceRef="Queue_LoadDictionaries" targetRef="Queue_BuildLLMRequest"/>
-    <bpmn:sequenceFlow id="Flow_23" sourceRef="Queue_BuildLLMRequest" targetRef="Queue_CallLLM"/>
-    <bpmn:sequenceFlow id="Flow_24" sourceRef="Queue_CallLLM" targetRef="Queue_ValidateJSONSchema"/>
-    <bpmn:sequenceFlow id="Flow_25" sourceRef="Queue_ValidateJSONSchema" targetRef="Gateway_JSONValid_Queue"/>
-    <bpmn:sequenceFlow id="Flow_26_yes" sourceRef="Gateway_JSONValid_Queue" targetRef="Queue_MapValidPayload" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_26_no" sourceRef="Gateway_JSONValid_Queue" targetRef="Queue_MapFallbackPayload" name="No"/>
-    <bpmn:sequenceFlow id="Flow_27a" sourceRef="Queue_MapValidPayload" targetRef="Sheets_WriteDataFacts_Queue"/>
-    <bpmn:sequenceFlow id="Flow_27b" sourceRef="Queue_MapFallbackPayload" targetRef="Sheets_WriteDataFacts_Queue"/>
-    <bpmn:sequenceFlow id="Flow_28" sourceRef="Sheets_WriteDataFacts_Queue" targetRef="Bot_SendPostFactumNotification"/>
-    <bpmn:sequenceFlow id="Flow_29" sourceRef="Bot_SendPostFactumNotification" targetRef="End_QueuedDone"/>
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="Bot_ValidateJsonOnline" targetRef="Gateway_OnlineJsonValid"/>
+    <bpmn:sequenceFlow id="Flow_15_yes" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_MapValidOnline" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_15_no" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_MapFallbackOnline" name="No"/>
+    <bpmn:sequenceFlow id="Flow_16a" sourceRef="Bot_MapValidOnline" targetRef="Sheets_WriteOnline"/>
+    <bpmn:sequenceFlow id="Flow_16b" sourceRef="Bot_MapFallbackOnline" targetRef="Sheets_WriteOnline"/>
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="Sheets_WriteOnline" targetRef="Gateway_OnlineSheetsWriteSucceeded"/>
+    <bpmn:sequenceFlow id="Flow_18_yes" sourceRef="Gateway_OnlineSheetsWriteSucceeded" targetRef="Bot_SendImmediateConfirmation" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_18_no" sourceRef="Gateway_OnlineSheetsWriteSucceeded" targetRef="Bot_SendProcessingError" name="No"/>
+    <bpmn:sequenceFlow id="Flow_19" sourceRef="Bot_SendImmediateConfirmation" targetRef="End_OnlineDone"/>
 
-    <bpmn:textAnnotation id="TextAnnotation_PostPilot">
-      <bpmn:text>Pilot logging (required): structured JSON logs for message_received, llm_response_received/llm_timeout, json_validation_passed/failed, queue_enqueued/queue_dequeued, sheets_write_success/failed, post_factum_notification_sent. Required fields: timestamp, level, event, component, trace_id, chat_id, user_id, message_id, processing_path, status. Full spec: docs/logging/logging_spec.md. Post-pilot (out of scope here): idempotent writes, retry policy + DLQ, confidence logging, operational monitoring, dictionary schema expansion to code/label/description.</bpmn:text>
+    <bpmn:sequenceFlow id="Flow_20" sourceRef="Bot_CreateQueueTask" targetRef="Bot_EnqueueMessage"/>
+    <bpmn:sequenceFlow id="Flow_21" sourceRef="Bot_EnqueueMessage" targetRef="Gateway_EnqueueSucceeded"/>
+    <bpmn:sequenceFlow id="Flow_22_yes" sourceRef="Gateway_EnqueueSucceeded" targetRef="Bot_SendQueuedNotice" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_22_no" sourceRef="Gateway_EnqueueSucceeded" targetRef="Bot_SendProcessingError" name="No"/>
+    <bpmn:sequenceFlow id="Flow_23" sourceRef="Bot_SendQueuedNotice" targetRef="End_OnlineQueued"/>
+
+    <bpmn:sequenceFlow id="Flow_24" sourceRef="Queue_MessageReady" targetRef="Queue_PickPendingMessage"/>
+    <bpmn:sequenceFlow id="Flow_25" sourceRef="Queue_PickPendingMessage" targetRef="Queue_LoadDictionaries"/>
+    <bpmn:sequenceFlow id="Flow_26" sourceRef="Queue_LoadDictionaries" targetRef="Queue_BuildPrompt"/>
+    <bpmn:sequenceFlow id="Flow_27" sourceRef="Queue_BuildPrompt" targetRef="Queue_CallGemini"/>
+    <bpmn:sequenceFlow id="Flow_28" sourceRef="Queue_CallGemini" targetRef="Gateway_QueueLlmTimeout"/>
+
+    <bpmn:sequenceFlow id="Flow_29_yes" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_RequeueOnTimeout" name="Timeout"/>
+    <bpmn:sequenceFlow id="Flow_29_no" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_ValidateJson" name="Success"/>
+    <bpmn:sequenceFlow id="Flow_29_error" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_RequeueOnProcessingError" name="Error"/>
+    <bpmn:sequenceFlow id="Flow_30" sourceRef="Queue_RequeueOnTimeout" targetRef="End_QueueDeferred"/>
+
+    <bpmn:sequenceFlow id="Flow_31" sourceRef="Queue_ValidateJson" targetRef="Gateway_QueueJsonValid"/>
+    <bpmn:sequenceFlow id="Flow_32_yes" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_MapValid" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_32_no" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_MapFallback" name="No"/>
+    <bpmn:sequenceFlow id="Flow_33a" sourceRef="Queue_MapValid" targetRef="Sheets_WriteQueue"/>
+    <bpmn:sequenceFlow id="Flow_33b" sourceRef="Queue_MapFallback" targetRef="Sheets_WriteQueue"/>
+
+    <bpmn:sequenceFlow id="Flow_34" sourceRef="Sheets_WriteQueue" targetRef="Gateway_QueueSheetsWriteSucceeded"/>
+    <bpmn:sequenceFlow id="Flow_35_yes" sourceRef="Gateway_QueueSheetsWriteSucceeded" targetRef="Queue_MarkDone" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_35_no" sourceRef="Gateway_QueueSheetsWriteSucceeded" targetRef="Queue_RequeueOnProcessingError" name="No"/>
+    <bpmn:sequenceFlow id="Flow_36" sourceRef="Queue_MarkDone" targetRef="Bot_SendPostFactumNotification"/>
+    <bpmn:sequenceFlow id="Flow_37" sourceRef="Bot_SendPostFactumNotification" targetRef="End_QueuedDone"/>
+    <bpmn:sequenceFlow id="Flow_38" sourceRef="Queue_RequeueOnProcessingError" targetRef="End_QueueDeferred"/>
+
+    <bpmn:sequenceFlow id="Flow_39" sourceRef="Bot_SendProcessingError" targetRef="End_OnlineFailed"/>
+
+    <bpmn:textAnnotation id="TextAnnotation_LoggingAndNotes">
+      <bpmn:text>Structured logging events reflected in this BPMN: polling_started, queue_worker_bootstrap_started, queue_worker_started, message_received, llm_response_received, llm_timeout, json_validation_passed/failed, queue_enqueued, queue_enqueue_failed, queue_dequeued, queue_task_invalid, queue_processing_failed, sheets_write_success/failed, post_factum_notification_sent, classification_failed, telegram_update_error. Online path ends immediately after queued notice; deferred processing and post-factum notification are executed by a separate polling queue worker process. Pilot queue mode intentionally runs without retry policy schedule/DLQ.</bpmn:text>
     </bpmn:textAnnotation>
-    <bpmn:association id="Association_PostPilot" sourceRef="End_QueuedDone" targetRef="TextAnnotation_PostPilot"/>
+    <bpmn:association id="Association_LoggingAndNotes" sourceRef="End_QueuedDone" targetRef="TextAnnotation_LoggingAndNotes"/>
   </bpmn:process>
 
   <bpmndi:BPMNDiagram id="BPMNDiagram_ConstructionReportBot">
     <bpmndi:BPMNPlane id="BPMNPlane_ConstructionReportBot" bpmnElement="Process_ConstructionReportBot">
       <bpmndi:BPMNShape id="Shape_Lane_User" bpmnElement="Lane_User" isHorizontal="true">
-        <dc:Bounds x="120" y="120" width="4440" height="130"/>
+        <dc:Bounds x="120" y="100" width="5560" height="120"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Telegram" bpmnElement="Lane_Telegram" isHorizontal="true">
-        <dc:Bounds x="120" y="250" width="4440" height="110"/>
+        <dc:Bounds x="120" y="220" width="5560" height="90"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Bot" bpmnElement="Lane_Bot" isHorizontal="true">
-        <dc:Bounds x="120" y="360" width="4440" height="300"/>
+        <dc:Bounds x="120" y="310" width="5560" height="240"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_QueueWorker" bpmnElement="Lane_QueueWorker" isHorizontal="true">
+        <dc:Bounds x="120" y="550" width="5560" height="220"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Sheets" bpmnElement="Lane_Sheets" isHorizontal="true">
-        <dc:Bounds x="120" y="660" width="4440" height="180"/>
+        <dc:Bounds x="120" y="770" width="5560" height="180"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="Shape_Start_OpenChat" bpmnElement="Start_OpenChat">
-        <dc:Bounds x="160" y="167" width="36" height="36"/>
+      <bpmndi:BPMNShape id="Shape_Start_UserOpensChat" bpmnElement="Start_UserOpensChat">
+        <dc:Bounds x="160" y="142" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_OpenChat" bpmnElement="User_OpenChat">
-        <dc:Bounds x="220" y="145" width="120" height="80"/>
+        <dc:Bounds x="220" y="120" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_PressStart" bpmnElement="User_PressStart">
-        <dc:Bounds x="390" y="145" width="120" height="80"/>
+        <dc:Bounds x="380" y="120" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_SendWelcome" bpmnElement="Bot_SendWelcome">
-        <dc:Bounds x="580" y="410" width="120" height="80"/>
+        <dc:Bounds x="540" y="390" width="120" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_User_PressReport" bpmnElement="User_PressReport">
-        <dc:Bounds x="760" y="145" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_User_PressReportProgress" bpmnElement="User_PressReportProgress">
+        <dc:Bounds x="700" y="120" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_SendInputInstruction" bpmnElement="Bot_SendInputInstruction">
-        <dc:Bounds x="940" y="410" width="120" height="80"/>
+        <dc:Bounds x="860" y="390" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_SendFreeText" bpmnElement="User_SendFreeText">
-        <dc:Bounds x="1120" y="145" width="120" height="80"/>
+        <dc:Bounds x="1020" y="120" width="120" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Telegram_ReceivePolling" bpmnElement="Telegram_ReceivePolling">
-        <dc:Bounds x="1300" y="265" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_PreprocessText" bpmnElement="Bot_PreprocessText">
-        <dc:Bounds x="1480" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_LoadDictionaries" bpmnElement="Bot_LoadDictionaries">
-        <dc:Bounds x="1660" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_BuildLLMRequest" bpmnElement="Bot_BuildLLMRequest">
-        <dc:Bounds x="1840" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_CallLLM_30s" bpmnElement="Bot_CallLLM_30s">
-        <dc:Bounds x="2020" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_LLMRepliedIn30s" bpmnElement="Gateway_LLMRepliedIn30s" isMarkerVisible="true">
-        <dc:Bounds x="2200" y="425" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_ValidateJSONSchema" bpmnElement="Bot_ValidateJSONSchema">
-        <dc:Bounds x="2320" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_JSONValid_Immediate" bpmnElement="Gateway_JSONValid_Immediate" isMarkerVisible="true">
-        <dc:Bounds x="2500" y="425" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_MapValidPayload_Immediate" bpmnElement="Bot_MapValidPayload_Immediate">
-        <dc:Bounds x="2620" y="390" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_MapFallbackPayload_Immediate" bpmnElement="Bot_MapFallbackPayload_Immediate">
-        <dc:Bounds x="2620" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Sheets_WriteDataFacts_Immediate" bpmnElement="Sheets_WriteDataFacts_Immediate">
-        <dc:Bounds x="2800" y="700" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendImmediateConfirmation" bpmnElement="Bot_SendImmediateConfirmation">
-        <dc:Bounds x="2980" y="410" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End_ImmediateDone" bpmnElement="End_ImmediateDone">
-        <dc:Bounds x="3160" y="722" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_EnqueueMessage" bpmnElement="Bot_EnqueueMessage">
-        <dc:Bounds x="2320" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendQueueNotice" bpmnElement="Bot_SendQueueNotice">
-        <dc:Bounds x="2500" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MessageReady" bpmnElement="Queue_MessageReady">
-        <dc:Bounds x="2680" y="542" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_LoadDictionaries" bpmnElement="Queue_LoadDictionaries">
-        <dc:Bounds x="2840" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_BuildLLMRequest" bpmnElement="Queue_BuildLLMRequest">
-        <dc:Bounds x="3020" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_CallLLM" bpmnElement="Queue_CallLLM">
-        <dc:Bounds x="3200" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_ValidateJSONSchema" bpmnElement="Queue_ValidateJSONSchema">
-        <dc:Bounds x="3380" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_JSONValid_Queue" bpmnElement="Gateway_JSONValid_Queue" isMarkerVisible="true">
-        <dc:Bounds x="3560" y="535" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MapValidPayload" bpmnElement="Queue_MapValidPayload">
-        <dc:Bounds x="3680" y="470" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MapFallbackPayload" bpmnElement="Queue_MapFallbackPayload">
-        <dc:Bounds x="3680" y="580" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Sheets_WriteDataFacts_Queue" bpmnElement="Sheets_WriteDataFacts_Queue">
-        <dc:Bounds x="3860" y="700" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendPostFactumNotification" bpmnElement="Bot_SendPostFactumNotification">
-        <dc:Bounds x="4040" y="520" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End_QueuedDone" bpmnElement="End_QueuedDone">
-        <dc:Bounds x="4220" y="722" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_TextAnnotation_PostPilot" bpmnElement="TextAnnotation_PostPilot">
-        <dc:Bounds x="4300" y="620" width="260" height="90"/>
+      <bpmndi:BPMNShape id="Shape_TG_ReceivePollingUpdate" bpmnElement="TG_ReceivePollingUpdate">
+        <dc:Bounds x="1180" y="225" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="Edge_Flow_01" bpmnElement="Flow_01">
-        <di:waypoint x="196" y="185"/>
-        <di:waypoint x="220" y="185"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_02" bpmnElement="Flow_02">
-        <di:waypoint x="340" y="185"/>
-        <di:waypoint x="390" y="185"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_03" bpmnElement="Flow_03">
-        <di:waypoint x="510" y="185"/>
-        <di:waypoint x="550" y="185"/>
-        <di:waypoint x="550" y="450"/>
-        <di:waypoint x="580" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_04" bpmnElement="Flow_04">
-        <di:waypoint x="700" y="450"/>
-        <di:waypoint x="730" y="450"/>
-        <di:waypoint x="730" y="185"/>
-        <di:waypoint x="760" y="185"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_05" bpmnElement="Flow_05">
-        <di:waypoint x="880" y="185"/>
-        <di:waypoint x="910" y="185"/>
-        <di:waypoint x="910" y="450"/>
-        <di:waypoint x="940" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_06" bpmnElement="Flow_06">
-        <di:waypoint x="1060" y="450"/>
-        <di:waypoint x="1090" y="450"/>
-        <di:waypoint x="1090" y="185"/>
-        <di:waypoint x="1120" y="185"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_07" bpmnElement="Flow_07">
-        <di:waypoint x="1240" y="185"/>
-        <di:waypoint x="1270" y="185"/>
-        <di:waypoint x="1270" y="305"/>
-        <di:waypoint x="1300" y="305"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_08" bpmnElement="Flow_08">
-        <di:waypoint x="1420" y="305"/>
-        <di:waypoint x="1450" y="305"/>
-        <di:waypoint x="1450" y="450"/>
-        <di:waypoint x="1480" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_09" bpmnElement="Flow_09">
-        <di:waypoint x="1600" y="450"/>
-        <di:waypoint x="1660" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_10" bpmnElement="Flow_10">
-        <di:waypoint x="1780" y="450"/>
-        <di:waypoint x="1840" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_11" bpmnElement="Flow_11">
-        <di:waypoint x="1960" y="450"/>
-        <di:waypoint x="2020" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_12" bpmnElement="Flow_12">
-        <di:waypoint x="2140" y="450"/>
-        <di:waypoint x="2200" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_13_yes" bpmnElement="Flow_13_yes">
-        <di:waypoint x="2250" y="450"/>
-        <di:waypoint x="2320" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_13_no" bpmnElement="Flow_13_no">
-        <di:waypoint x="2225" y="475"/>
-        <di:waypoint x="2225" y="560"/>
-        <di:waypoint x="2320" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_14" bpmnElement="Flow_14">
-        <di:waypoint x="2440" y="450"/>
-        <di:waypoint x="2500" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_15_yes" bpmnElement="Flow_15_yes">
-        <di:waypoint x="2550" y="450"/>
-        <di:waypoint x="2590" y="450"/>
-        <di:waypoint x="2590" y="430"/>
-        <di:waypoint x="2620" y="430"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_15_no" bpmnElement="Flow_15_no">
-        <di:waypoint x="2525" y="475"/>
-        <di:waypoint x="2525" y="560"/>
-        <di:waypoint x="2620" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_16a" bpmnElement="Flow_16a">
-        <di:waypoint x="2740" y="430"/>
-        <di:waypoint x="2770" y="430"/>
-        <di:waypoint x="2770" y="740"/>
-        <di:waypoint x="2800" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_16b" bpmnElement="Flow_16b">
-        <di:waypoint x="2740" y="560"/>
-        <di:waypoint x="2770" y="560"/>
-        <di:waypoint x="2770" y="740"/>
-        <di:waypoint x="2800" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_17" bpmnElement="Flow_17">
-        <di:waypoint x="2920" y="740"/>
-        <di:waypoint x="2950" y="740"/>
-        <di:waypoint x="2950" y="450"/>
-        <di:waypoint x="2980" y="450"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_18" bpmnElement="Flow_18">
-        <di:waypoint x="3100" y="450"/>
-        <di:waypoint x="3130" y="450"/>
-        <di:waypoint x="3130" y="740"/>
-        <di:waypoint x="3160" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_19" bpmnElement="Flow_19">
-        <di:waypoint x="2440" y="560"/>
-        <di:waypoint x="2500" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_20" bpmnElement="Flow_20">
-        <di:waypoint x="2620" y="560"/>
-        <di:waypoint x="2680" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_21" bpmnElement="Flow_21">
-        <di:waypoint x="2716" y="560"/>
-        <di:waypoint x="2840" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_22" bpmnElement="Flow_22">
-        <di:waypoint x="2960" y="560"/>
-        <di:waypoint x="3020" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_23" bpmnElement="Flow_23">
-        <di:waypoint x="3140" y="560"/>
-        <di:waypoint x="3200" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_24" bpmnElement="Flow_24">
-        <di:waypoint x="3320" y="560"/>
-        <di:waypoint x="3380" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_25" bpmnElement="Flow_25">
-        <di:waypoint x="3500" y="560"/>
-        <di:waypoint x="3560" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_26_yes" bpmnElement="Flow_26_yes">
-        <di:waypoint x="3610" y="560"/>
-        <di:waypoint x="3640" y="560"/>
-        <di:waypoint x="3640" y="510"/>
-        <di:waypoint x="3680" y="510"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_26_no" bpmnElement="Flow_26_no">
-        <di:waypoint x="3585" y="585"/>
-        <di:waypoint x="3585" y="620"/>
-        <di:waypoint x="3680" y="620"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_27a" bpmnElement="Flow_27a">
-        <di:waypoint x="3800" y="510"/>
-        <di:waypoint x="3830" y="510"/>
-        <di:waypoint x="3830" y="740"/>
-        <di:waypoint x="3860" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_27b" bpmnElement="Flow_27b">
-        <di:waypoint x="3800" y="620"/>
-        <di:waypoint x="3830" y="620"/>
-        <di:waypoint x="3830" y="740"/>
-        <di:waypoint x="3860" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_28" bpmnElement="Flow_28">
-        <di:waypoint x="3980" y="740"/>
-        <di:waypoint x="4010" y="740"/>
-        <di:waypoint x="4010" y="560"/>
-        <di:waypoint x="4040" y="560"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_29" bpmnElement="Flow_29">
-        <di:waypoint x="4160" y="560"/>
-        <di:waypoint x="4190" y="560"/>
-        <di:waypoint x="4190" y="740"/>
-        <di:waypoint x="4220" y="740"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Association_PostPilot" bpmnElement="Association_PostPilot">
-        <di:waypoint x="4256" y="740"/>
-        <di:waypoint x="4300" y="665"/>
+      <bpmndi:BPMNShape id="Shape_Bot_PreprocessText" bpmnElement="Bot_PreprocessText">
+        <dc:Bounds x="1340" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_LoadDictionariesOnline" bpmnElement="Bot_LoadDictionariesOnline">
+        <dc:Bounds x="1500" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_BuildPromptOnline" bpmnElement="Bot_BuildPromptOnline">
+        <dc:Bounds x="1660" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_CallGeminiOnline" bpmnElement="Bot_CallGeminiOnline">
+        <dc:Bounds x="1820" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_OnlineLlmReplied" bpmnElement="Gateway_OnlineLlmReplied" isMarkerVisible="true">
+        <dc:Bounds x="1980" y="405" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Bot_ValidateJsonOnline" bpmnElement="Bot_ValidateJsonOnline">
+        <dc:Bounds x="2100" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_OnlineJsonValid" bpmnElement="Gateway_OnlineJsonValid" isMarkerVisible="true">
+        <dc:Bounds x="2260" y="405" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_MapValidOnline" bpmnElement="Bot_MapValidOnline">
+        <dc:Bounds x="2380" y="360" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_MapFallbackOnline" bpmnElement="Bot_MapFallbackOnline">
+        <dc:Bounds x="2380" y="470" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Sheets_WriteOnline" bpmnElement="Sheets_WriteOnline">
+        <dc:Bounds x="2560" y="820" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_OnlineSheetsWriteSucceeded" bpmnElement="Gateway_OnlineSheetsWriteSucceeded" isMarkerVisible="true">
+        <dc:Bounds x="2740" y="835" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendImmediateConfirmation" bpmnElement="Bot_SendImmediateConfirmation">
+        <dc:Bounds x="2860" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Bot_CreateQueueTask" bpmnElement="Bot_CreateQueueTask">
+        <dc:Bounds x="2100" y="470" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_EnqueueMessage" bpmnElement="Bot_EnqueueMessage">
+        <dc:Bounds x="2260" y="470" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_EnqueueSucceeded" bpmnElement="Gateway_EnqueueSucceeded" isMarkerVisible="true">
+        <dc:Bounds x="2420" y="485" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendQueuedNotice" bpmnElement="Bot_SendQueuedNotice">
+        <dc:Bounds x="2540" y="470" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendProcessingError" bpmnElement="Bot_SendProcessingError">
+        <dc:Bounds x="2860" y="500" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Queue_MessageReady" bpmnElement="Queue_MessageReady">
+        <dc:Bounds x="2700" y="642" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_PickPendingMessage" bpmnElement="Queue_PickPendingMessage">
+        <dc:Bounds x="2800" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_LoadDictionaries" bpmnElement="Queue_LoadDictionaries">
+        <dc:Bounds x="2960" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_BuildPrompt" bpmnElement="Queue_BuildPrompt">
+        <dc:Bounds x="3120" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_CallGemini" bpmnElement="Queue_CallGemini">
+        <dc:Bounds x="3280" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_QueueLlmTimeout" bpmnElement="Gateway_QueueLlmTimeout" isMarkerVisible="true">
+        <dc:Bounds x="3440" y="635" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_RequeueOnTimeout" bpmnElement="Queue_RequeueOnTimeout">
+        <dc:Bounds x="3560" y="730" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Queue_ValidateJson" bpmnElement="Queue_ValidateJson">
+        <dc:Bounds x="3560" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_QueueJsonValid" bpmnElement="Gateway_QueueJsonValid" isMarkerVisible="true">
+        <dc:Bounds x="3720" y="635" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_MapValid" bpmnElement="Queue_MapValid">
+        <dc:Bounds x="3840" y="600" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_MapFallback" bpmnElement="Queue_MapFallback">
+        <dc:Bounds x="3840" y="710" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Sheets_WriteQueue" bpmnElement="Sheets_WriteQueue">
+        <dc:Bounds x="4020" y="820" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_QueueSheetsWriteSucceeded" bpmnElement="Gateway_QueueSheetsWriteSucceeded" isMarkerVisible="true">
+        <dc:Bounds x="4200" y="835" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_MarkDone" bpmnElement="Queue_MarkDone">
+        <dc:Bounds x="4320" y="620" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendPostFactumNotification" bpmnElement="Bot_SendPostFactumNotification">
+        <dc:Bounds x="4480" y="390" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_RequeueOnProcessingError" bpmnElement="Queue_RequeueOnProcessingError">
+        <dc:Bounds x="4320" y="730" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_End_OnlineQueued" bpmnElement="End_OnlineQueued">
+        <dc:Bounds x="3020" y="792" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_OnlineDone" bpmnElement="End_OnlineDone">
+        <dc:Bounds x="3020" y="842" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_OnlineFailed" bpmnElement="End_OnlineFailed">
+        <dc:Bounds x="3020" y="892" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_QueueDeferred" bpmnElement="End_QueueDeferred">
+        <dc:Bounds x="4480" y="852" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_QueuedDone" bpmnElement="End_QueuedDone">
+        <dc:Bounds x="4660" y="842" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_LoggingAndNotes" bpmnElement="TextAnnotation_LoggingAndNotes">
+        <dc:Bounds x="4780" y="730" width="900" height="160"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_01" bpmnElement="Flow_01"><di:waypoint x="196" y="160"/><di:waypoint x="220" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_02" bpmnElement="Flow_02"><di:waypoint x="340" y="160"/><di:waypoint x="380" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_03" bpmnElement="Flow_03"><di:waypoint x="500" y="160"/><di:waypoint x="520" y="160"/><di:waypoint x="520" y="430"/><di:waypoint x="540" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_04" bpmnElement="Flow_04"><di:waypoint x="660" y="430"/><di:waypoint x="680" y="430"/><di:waypoint x="680" y="160"/><di:waypoint x="700" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_05" bpmnElement="Flow_05"><di:waypoint x="820" y="160"/><di:waypoint x="840" y="160"/><di:waypoint x="840" y="430"/><di:waypoint x="860" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_06" bpmnElement="Flow_06"><di:waypoint x="980" y="430"/><di:waypoint x="1000" y="430"/><di:waypoint x="1000" y="160"/><di:waypoint x="1020" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_07" bpmnElement="Flow_07"><di:waypoint x="1140" y="160"/><di:waypoint x="1160" y="160"/><di:waypoint x="1160" y="265"/><di:waypoint x="1180" y="265"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_08" bpmnElement="Flow_08"><di:waypoint x="1300" y="265"/><di:waypoint x="1320" y="265"/><di:waypoint x="1320" y="430"/><di:waypoint x="1340" y="430"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_09" bpmnElement="Flow_09"><di:waypoint x="1460" y="430"/><di:waypoint x="1500" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_10" bpmnElement="Flow_10"><di:waypoint x="1620" y="430"/><di:waypoint x="1660" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_11" bpmnElement="Flow_11"><di:waypoint x="1780" y="430"/><di:waypoint x="1820" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_12" bpmnElement="Flow_12"><di:waypoint x="1940" y="430"/><di:waypoint x="1980" y="430"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_13_yes" bpmnElement="Flow_13_yes"><di:waypoint x="2030" y="430"/><di:waypoint x="2100" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13_no" bpmnElement="Flow_13_no"><di:waypoint x="2005" y="455"/><di:waypoint x="2005" y="510"/><di:waypoint x="2100" y="510"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13_error" bpmnElement="Flow_13_error"><di:waypoint x="2030" y="430"/><di:waypoint x="2920" y="430"/><di:waypoint x="2920" y="500"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_14" bpmnElement="Flow_14"><di:waypoint x="2220" y="430"/><di:waypoint x="2260" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_15_yes" bpmnElement="Flow_15_yes"><di:waypoint x="2310" y="420"/><di:waypoint x="2380" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_15_no" bpmnElement="Flow_15_no"><di:waypoint x="2310" y="440"/><di:waypoint x="2380" y="510"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_16a" bpmnElement="Flow_16a"><di:waypoint x="2500" y="400"/><di:waypoint x="2560" y="400"/><di:waypoint x="2560" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_16b" bpmnElement="Flow_16b"><di:waypoint x="2500" y="510"/><di:waypoint x="2530" y="510"/><di:waypoint x="2530" y="860"/><di:waypoint x="2560" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_17" bpmnElement="Flow_17"><di:waypoint x="2680" y="860"/><di:waypoint x="2740" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_18_yes" bpmnElement="Flow_18_yes"><di:waypoint x="2790" y="845"/><di:waypoint x="2920" y="845"/><di:waypoint x="2920" y="470"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_18_no" bpmnElement="Flow_18_no"><di:waypoint x="2790" y="875"/><di:waypoint x="2920" y="875"/><di:waypoint x="2920" y="580"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_19" bpmnElement="Flow_19"><di:waypoint x="2980" y="430"/><di:waypoint x="3038" y="430"/><di:waypoint x="3038" y="842"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_20" bpmnElement="Flow_20"><di:waypoint x="2220" y="510"/><di:waypoint x="2260" y="510"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_21" bpmnElement="Flow_21"><di:waypoint x="2380" y="510"/><di:waypoint x="2420" y="510"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_22_yes" bpmnElement="Flow_22_yes"><di:waypoint x="2470" y="500"/><di:waypoint x="2540" y="510"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_22_no" bpmnElement="Flow_22_no"><di:waypoint x="2470" y="520"/><di:waypoint x="2860" y="540"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_23" bpmnElement="Flow_23"><di:waypoint x="2660" y="510"/><di:waypoint x="3038" y="510"/><di:waypoint x="3038" y="810"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_24" bpmnElement="Flow_24"><di:waypoint x="2736" y="660"/><di:waypoint x="2800" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_25" bpmnElement="Flow_25"><di:waypoint x="2920" y="660"/><di:waypoint x="2960" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_26" bpmnElement="Flow_26"><di:waypoint x="3080" y="660"/><di:waypoint x="3120" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_27" bpmnElement="Flow_27"><di:waypoint x="3240" y="660"/><di:waypoint x="3280" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_28" bpmnElement="Flow_28"><di:waypoint x="3400" y="660"/><di:waypoint x="3440" y="660"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_29_yes" bpmnElement="Flow_29_yes"><di:waypoint x="3465" y="685"/><di:waypoint x="3465" y="770"/><di:waypoint x="3560" y="770"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_29_no" bpmnElement="Flow_29_no"><di:waypoint x="3490" y="660"/><di:waypoint x="3560" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_29_error" bpmnElement="Flow_29_error"><di:waypoint x="3490" y="660"/><di:waypoint x="3490" y="770"/><di:waypoint x="4320" y="770"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_30" bpmnElement="Flow_30"><di:waypoint x="3680" y="770"/><di:waypoint x="4498" y="770"/><di:waypoint x="4498" y="852"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_31" bpmnElement="Flow_31"><di:waypoint x="3680" y="660"/><di:waypoint x="3720" y="660"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_32_yes" bpmnElement="Flow_32_yes"><di:waypoint x="3770" y="650"/><di:waypoint x="3840" y="640"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_32_no" bpmnElement="Flow_32_no"><di:waypoint x="3770" y="670"/><di:waypoint x="3840" y="750"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_33a" bpmnElement="Flow_33a"><di:waypoint x="3960" y="640"/><di:waypoint x="4020" y="640"/><di:waypoint x="4020" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_33b" bpmnElement="Flow_33b"><di:waypoint x="3960" y="750"/><di:waypoint x="3990" y="750"/><di:waypoint x="3990" y="860"/><di:waypoint x="4020" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_34" bpmnElement="Flow_34"><di:waypoint x="4140" y="860"/><di:waypoint x="4200" y="860"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_35_yes" bpmnElement="Flow_35_yes"><di:waypoint x="4250" y="845"/><di:waypoint x="4380" y="845"/><di:waypoint x="4380" y="700"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_35_no" bpmnElement="Flow_35_no"><di:waypoint x="4250" y="875"/><di:waypoint x="4380" y="875"/><di:waypoint x="4380" y="810"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_36" bpmnElement="Flow_36"><di:waypoint x="4440" y="660"/><di:waypoint x="4480" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_37" bpmnElement="Flow_37"><di:waypoint x="4600" y="430"/><di:waypoint x="4678" y="430"/><di:waypoint x="4678" y="842"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_38" bpmnElement="Flow_38"><di:waypoint x="4440" y="770"/><di:waypoint x="4498" y="770"/><di:waypoint x="4498" y="852"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_39" bpmnElement="Flow_39"><di:waypoint x="2980" y="540"/><di:waypoint x="3038" y="540"/><di:waypoint x="3038" y="910"/></bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Edge_Association_LoggingAndNotes" bpmnElement="Association_LoggingAndNotes">
+        <di:waypoint x="4696" y="860"/>
+        <di:waypoint x="4780" y="810"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

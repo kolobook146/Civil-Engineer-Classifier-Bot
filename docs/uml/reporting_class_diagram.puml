@@ -1,110 +1,179 @@
 @startuml
-title UML Class Diagram — Telegram Bot Construction Reporting (Pilot)
+title UML Class Diagram - TG Build Bot (Pilot, polling + queue worker)
 
 skinparam classAttributeIconSize 0
 hide circle
 
+package "Config" {
+  class Settings {
+    +app: AppSettings
+    +telegram: TelegramSettings
+    +llm: LLMSettings
+    +dictionaries: DictionarySettings
+    +google_sheets: GoogleSheetsSettings
+    +queue: QueueSettings
+    +logging: LoggingSettings
+    +validate_for_polling(): void
+    +validate_for_full_pipeline(): void
+  }
+
+  class AppSettings {
+    +env: str
+    +classifier_version: str
+  }
+
+  class TelegramSettings {
+    +bot_token: str
+    +polling_timeout_seconds: int
+    +poll_interval_seconds: float
+    +allowed_updates: list
+  }
+
+  class LLMSettings {
+    +base_url: str
+    +api_key: str
+    +model: str
+    +timeout_seconds: int
+  }
+
+  class DictionarySettings {
+    +directory: Path
+    +work_types_file: Path
+    +stages_file: Path
+    +functions_file: Path
+  }
+
+  class GoogleSheetsSettings {
+    +service_account_file: Path
+    +spreadsheet_id: str
+    +worksheet_name: str
+  }
+
+  class QueueSettings {
+    +db_path: Path
+    +poll_interval_seconds: int
+  }
+
+  class LoggingSettings {
+    +level: str
+    +json: bool
+    +file_path: Path
+    +max_bytes: int
+    +backup_count: int
+    +raw_text_preview_enabled: bool
+  }
+}
+
 package "Presentation" {
   class TelegramPollingHandler {
-    +handleUpdate(update: TelegramUpdate): void
+    +register(application: Application): void
+    +start_command(update: Update, context): void
+    +report_execution_callback(update: Update, context): void
+    +free_text_handler(update: Update, context): void
+    +error_handler(update: object, context): void
   }
 
   class NotificationService {
-    +sendWelcome(chatId: string): void
-    +sendInputInstruction(chatId: string): void
-    +sendImmediateConfirmation(chatId: string, payload: ClassificationResult): void
-    +sendQueuedNotice(chatId: string): void
-    +sendPostFactumNotification(chatId: string): void
+    +send_welcome(target_message: Message, reply_markup): void
+    +send_input_instruction(target_message: Message): void
+    +send_immediate_confirmation(target_message: Message, classification_payload: dict, status: str): void
+    +send_processing_error(target_message: Message): void
+    +send_queued_notice(target_message: Message): void
+    +send_post_factum_notification(bot: Bot, chat_id: str, user_id: str, message_id: str, classification_payload: dict, status: str): void
   }
 }
 
 package "Application" {
   class MessagePreprocessor {
-    +normalize(text: string): string
+    +normalize(text: str): str
   }
 
   class ClassificationOrchestrator {
-    +classify(update: TelegramUpdate): DataFactRecord
-    +classifyFromQueue(task: QueueTask): DataFactRecord
+    +classify(raw_text: str, normalized_text: str?, meta: TelegramMessageMeta): ClassificationRunResult
+    +classify_from_queue(raw_text: str, normalized_text: str?, meta: TelegramMessageMeta): ClassificationRunResult
+    +classifyFromQueue(raw_text: str, normalized_text: str?, meta: TelegramMessageMeta): ClassificationRunResult
   }
 
   class PromptBuilder {
-    +build(rawText: string, dict: ClassificationDictionary): string
-    +buildStageFunctionHint(): string
+    +build(raw_text: str, dictionary: ClassificationDictionary): str
+    +build_stage_function_hint(): str
+    +buildStageFunctionHint(): str
   }
 
   class JsonSchemaValidator {
-    +validate(resultJson: string): ValidationResult
+    +validate(result_json: str, dictionary: ClassificationDictionary?): ValidationResult
+  }
+
+  class ValidationResult {
+    +is_valid: bool
+    +errors: tuple
+    +payload: dict
   }
 
   class FallbackMapper {
-    +mapInvalid(rawLlmResponse: string, update: TelegramUpdate): ClassificationResult
-  }
-
-  class QueueService {
-    +enqueue(task: QueueTask): void
-    +dequeue(): QueueTask
+    +map_invalid(raw_llm_response: str): ClassificationResult
+    +mapInvalid(rawLlmResponse: str): ClassificationResult
   }
 
   class QueueWorker {
-    +process(task: QueueTask): void
+    +run_forever(bot: Bot): void
+    +process_once(bot: Bot): bool
   }
 }
 
 package "Domain" {
-  class TelegramUpdate {
-    +chatId: string
-    +userId: string
-    +messageId: string
-    +rawText: string
-    +receivedAt: datetime
-  }
-
-  class ClassificationDictionary {
-    +workTypes: List<string>
-    +stages: List<string>
-    +functions: List<string>
-    +version: string
+  class TelegramMessageMeta {
+    +user_id: str
+    +chat_id: str
+    +message_id: str
+    +timestamp: datetime
   }
 
   class ClassificationResult {
-    +volume: string?
-    +unit: string?
-    +workType: string?
-    +stage: string?
-    +function: string?
-    +comment: string?
+    +volume: str?
+    +unit: str?
+    +work_type: str?
+    +stage: str?
+    +function: str?
+    +comment: str?
+    +as_json_dict(): dict
   }
 
   class AuditFields {
     +timestamp: datetime
-    +userId: string
-    +chatId: string
-    +messageId: string
-    +model: string
-    +classifierVersion: string
+    +user_id: str
+    +chat_id: str
+    +message_id: str
+    +model: str
+    +classifier_version: str
     +status: ProcessingStatus
   }
 
   class DataFactRecord {
-    +rawText: string
+    +raw_text: str
     +classification: ClassificationResult
     +audit: AuditFields
   }
 
-  class ValidationResult {
-    +isValid: bool
-    +errors: List<string>
+  class ClassificationRunResult {
+    +record: DataFactRecord
+    +llm_raw_response: str
+    +dictionary_version: str
   }
 
   class QueueTask {
-    +chatId: string
-    +messageId: string
-    +rawText: string
-    +enqueuedAt: datetime
+    +queue_id: int?
+    +user_id: str
+    +chat_id: str
+    +message_id: str
+    +raw_text: str
+    +normalized_text: str?
+    +received_at: datetime
+    +enqueued_at: datetime
   }
 
   enum ProcessingStatus {
+    RECEIVED
     QUEUED
     PROCESSED
     PROCESSED_WITH_FALLBACK
@@ -114,59 +183,75 @@ package "Domain" {
 }
 
 package "Infrastructure" {
+  class ClassificationDictionary {
+    +work_types: tuple
+    +stages: tuple
+    +functions: tuple
+    +version: str
+  }
+
   class DictionaryRepository {
+    +load_from_text_files(): ClassificationDictionary
     +loadFromTextFiles(): ClassificationDictionary
   }
 
   class GeminiClient {
-    +classify(prompt: string, timeoutSeconds: int = 30): string
+    +classify(prompt: str, timeout_seconds: int): str
   }
 
+  class LLMTimeoutError
+
   class GoogleSheetsRepository {
-    +appendDataFact(record: DataFactRecord): void
+    +append_data_fact(record: DataFactRecord): AppendResult
+    +appendDataFact(record: DataFactRecord): AppendResult
+  }
+
+  class AppendResult {
+    +updated_range: str?
+  }
+
+  class QueueRepository {
+    +enqueue(task: QueueTask): int
+    +dequeue(): QueueTask
+    +mark_done(queue_id: int): void
+    +requeue(queue_id: int, error: str): void
+    +size(): int
   }
 }
 
 package "Observability" {
-  class LoggingService {
-    +info(event: LogEvent, context: LogContext): void
-    +warning(event: LogEvent, context: LogContext): void
-    +error(event: LogEvent, context: LogContext): void
-  }
-
   class CorrelationIdFactory {
-    +buildTraceId(chatId: string, messageId: string): string
+    +build_trace_id(chat_id: str, message_id: str): str
   }
 
   class LogContext {
-    +traceId: string
-    +chatId: string
-    +userId: string
-    +messageId: string
-    +processingPath: string
-    +status: ProcessingStatus
-    +component: string
-  }
-
-  class StructuredLogRecord {
-    +timestamp: datetime
-    +level: LogLevel
-    +event: LogEvent
-    +context: LogContext
-    +payload: Map<string, any>
+    +trace_id: str
+    +chat_id: str
+    +user_id: str
+    +message_id: str
+    +processing_path: str
+    +status: str
   }
 
   enum LogEvent {
+    polling_started
+    queue_worker_bootstrap_started
+    queue_worker_started
     message_received
     llm_response_received
     llm_timeout
     json_validation_passed
     json_validation_failed
     queue_enqueued
+    queue_enqueue_failed
     queue_dequeued
+    queue_task_invalid
+    queue_processing_failed
     sheets_write_success
     sheets_write_failed
     post_factum_notification_sent
+    classification_failed
+    telegram_update_error
   }
 
   enum LogLevel {
@@ -175,82 +260,118 @@ package "Observability" {
     ERROR
   }
 
-  class LogSink {
-    +emit(record: StructuredLogRecord): void
+  class StructuredLogRecord {
+    +timestamp: str
+    +level: str
+    +event: str
+    +component: str
+    +trace_id: str
+    +chat_id: str
+    +user_id: str
+    +message_id: str
+    +processing_path: str
+    +status: str
+    +payload: dict
+    +as_dict(): dict
+  }
+
+  interface LogSink {
+    +emit(record: dict): void
+  }
+
+  class LoggingService {
+    +info(event: LogEvent, component: str, context: LogContext, payload: dict): void
+    +warning(event: LogEvent, component: str, context: LogContext, payload: dict): void
+    +error(event: LogEvent, component: str, context: LogContext, payload: dict): void
+  }
+
+  class StdoutLogSink {
+    +emit(record: dict): void
+  }
+
+  class FileLogSink {
+    +emit(record: dict): void
   }
 }
 
+Settings *-- AppSettings
+Settings *-- TelegramSettings
+Settings *-- LLMSettings
+Settings *-- DictionarySettings
+Settings *-- GoogleSheetsSettings
+Settings *-- QueueSettings
+Settings *-- LoggingSettings
+
+TelegramPollingHandler --> NotificationService
 TelegramPollingHandler --> MessagePreprocessor
 TelegramPollingHandler --> ClassificationOrchestrator
-TelegramPollingHandler --> NotificationService
+TelegramPollingHandler --> QueueRepository
 TelegramPollingHandler --> LoggingService
+TelegramPollingHandler --> CorrelationIdFactory
 
-ClassificationOrchestrator --> DictionaryRepository
-ClassificationOrchestrator --> PromptBuilder
-ClassificationOrchestrator --> GeminiClient
-ClassificationOrchestrator --> JsonSchemaValidator
-ClassificationOrchestrator --> FallbackMapper
-ClassificationOrchestrator --> GoogleSheetsRepository
-ClassificationOrchestrator --> QueueService
-ClassificationOrchestrator --> LoggingService
-
-QueueWorker --> QueueService
+QueueWorker --> QueueRepository
 QueueWorker --> ClassificationOrchestrator
 QueueWorker --> NotificationService
 QueueWorker --> LoggingService
+QueueWorker --> CorrelationIdFactory
 
-GoogleSheetsRepository --> LoggingService
-NotificationService --> LoggingService
-
-LoggingService --> CorrelationIdFactory
-LoggingService --> LogSink
-LoggingService --> LogContext
-LoggingService --> LogEvent
-StructuredLogRecord *-- LogContext
-StructuredLogRecord --> LogLevel
-StructuredLogRecord --> LogEvent
-LogSink --> StructuredLogRecord
+ClassificationOrchestrator --> DictionaryRepository
+ClassificationOrchestrator --> GeminiClient
+ClassificationOrchestrator --> GoogleSheetsRepository
+ClassificationOrchestrator --> PromptBuilder
+ClassificationOrchestrator --> JsonSchemaValidator
+ClassificationOrchestrator --> FallbackMapper
+ClassificationOrchestrator --> LoggingService
+ClassificationOrchestrator --> CorrelationIdFactory
+ClassificationOrchestrator --> TelegramMessageMeta
+ClassificationOrchestrator --> ClassificationRunResult
 
 PromptBuilder --> ClassificationDictionary
 JsonSchemaValidator --> ValidationResult
+JsonSchemaValidator --> ClassificationDictionary
 FallbackMapper --> ClassificationResult
+
+DictionaryRepository --> DictionarySettings
+DictionaryRepository --> ClassificationDictionary
+GoogleSheetsRepository --> GoogleSheetsSettings
+GoogleSheetsRepository --> AppendResult
+GoogleSheetsRepository --> LoggingService
+GoogleSheetsRepository --> CorrelationIdFactory
+QueueRepository --> QueueSettings
+GeminiClient ..> LLMTimeoutError
 
 DataFactRecord *-- ClassificationResult
 DataFactRecord *-- AuditFields
+ClassificationRunResult *-- DataFactRecord
 AuditFields --> ProcessingStatus
-LogContext --> ProcessingStatus
 
-ClassificationOrchestrator --> DataFactRecord
-ClassificationOrchestrator --> TelegramUpdate
-ClassificationOrchestrator --> QueueTask
-QueueService --> QueueTask
+NotificationService --> LoggingService
+NotificationService --> CorrelationIdFactory
 
-note right of JsonSchemaValidator
-  Strict JSON schema:
-  - workType/stage/function: single value or null
-  - invalid JSON -> full LLM response goes to comment
+LoggingService --> LogEvent
+LoggingService --> LogContext
+LoggingService --> StructuredLogRecord
+LoggingService --> LogLevel
+LoggingService --> LogSink
+StructuredLogRecord --> LogLevel
+StdoutLogSink ..|> LogSink
+FileLogSink ..|> LogSink
+
+note right of ClassificationOrchestrator
+  Orchestrator flow:
+  dictionaries -> prompt -> Gemini -> schema validation
+  -> fallback if invalid JSON -> append DataFactRecord to Sheets.
+  LLM timeout is rethrown as LLMTimeoutError.
 end note
 
-note right of PromptBuilder
-  Pilot prompt includes explicit definitions:
-  - stage: process/project stage
-  - function: functional work block
+note right of QueueRepository
+  SQLite queue for pilot.
+  On startup, tasks in "processing" are restored to "pending".
 end note
 
 note right of LoggingService
-  Structured logs are required for pilot:
-  - message_received
-  - llm_response/timeout
-  - json_validation_result
-  - queue_enqueued/dequeued
-  - sheets_write_result
-  Gemini calls are made via google-genai SDK
-  See docs/logging/logging_spec.md
-end note
-
-note right of DataFactRecord
-  rawText is always persisted
-  (immediate and queue paths)
+  Structured JSON logging contract:
+  docs/logging/logging_spec.md
 end note
 
 @enduml

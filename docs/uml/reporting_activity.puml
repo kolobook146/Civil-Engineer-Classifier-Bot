@@ -1,145 +1,120 @@
 @startuml
-title UML Activity — Telegram Bot Construction Reporting (Pilot)
+title UML Activity - TG Build Bot Online Polling Flow (Pilot)
 
 start
+
+partition PollingProcess {
+  :Log event polling_started;
+}
 
 partition User {
   :Open chat with bot;
   :Press /start (first time);
 }
 
-partition Bot {
-  :Send welcome message;
+partition BotOnline {
+  :Send welcome message with "Report Progress" button;
 }
 
 partition User {
   :Press "Report Progress";
 }
 
-partition Bot {
+partition BotOnline {
   :Send input instruction message;
 }
 
 partition User {
-  :Send free-form message about completed work;
+  :Send free-form progress message;
 }
 
 partition Telegram {
-  :Receive Update (Polling);
+  :Receive update (Polling);
 }
 
-partition Bot {
-  :Log event message_received
-(trace_id=chat_id:message_id, raw_text_length, raw_text_sha256);
-  :Preprocess text
-(trim, normalize spaces);
-  :Load dictionaries from text files
-(work_type, stage, function);
-  :Build Gemini request via google-genai SDK
-(dictionaries + full raw_text + stage/function definitions)
+partition BotOnline {
+  :Log event message_received;
+  :Preprocess text (trim, normalize spaces);
+  :Build TelegramMessageMeta;
+  :Load dictionaries from text files;
+  :Build Gemini prompt;
   :Call Gemini via google-genai SDK (timeout 30 sec);
 }
 
-if (LLM replied in 30 sec?) then (yes)
-  partition Bot {
-    :Log event llm_response_received
-(llm_model, llm_latency_ms);
-    :Validate strict JSON schema
-(single value or null for work_type/stage/function);
+if (Gemini call successful?) then (yes)
+  partition BotOnline {
+    :Log event llm_response_received;
+    :Validate JSON schema + dictionary constraints;
   }
 
   if (JSON valid?) then (yes)
-    partition Bot {
+    partition BotOnline {
       :Log event json_validation_passed;
       :Map structured fields from JSON;
       :Set status = PROCESSED;
     }
   else (no)
-    partition Bot {
-      :Log event json_validation_failed
-(validation_errors_count, validation_errors);
-      :Put full raw LLM response into comment;
+    partition BotOnline {
+      :Log event json_validation_failed;
+      :Fallback mapper - full raw LLM response in comment;
       :Set status = PROCESSED_WITH_FALLBACK;
     }
   endif
 
   partition GoogleSheets {
-    :Write row to data_facts:
-raw_text + extracted fields + audit fields
-(timestamp,user_id,chat_id,message_id,model,classifier_version,status);
+    :Append row to data_facts;
   }
 
-  partition Bot {
-    :Log event sheets_write_success
-(sheet_name=data_facts, row_index);
-    :Send message to user:
-"Recorded data: {JSON}";
-  }
-  stop
-
-else (no)
-  partition Bot {
-    :Log event llm_timeout
-(timeout_seconds=30);
-    :Put message in queue;
-    :Set status = QUEUED;
-    :Log event queue_enqueued;
-    :Send message to user:
-"LLM is busy, message queued.
-We will notify you after it is recorded.";
-  }
-
-  partition QueueWorker {
-    :Take queued message when worker runs;
-    :Log event queue_dequeued
-(queue_latency_ms);
-  }
-
-  partition Bot {
-    :Load dictionaries from text files;
-    :Build Gemini request via google-genai SDK
-(dictionaries + full raw_text + stage/function definitions)
-    :Call Gemini via google-genai SDK from queue worker;
-    :Log event llm_response_received;
-    :Validate strict JSON schema;
-  }
-
-  if (JSON valid in queue path?) then (yes)
-    partition Bot {
-      :Log event json_validation_passed;
-      :Map structured fields from JSON;
-      :Set status = PROCESSED_FROM_QUEUE;
+  if (Sheets write successful?) then (yes)
+    partition BotOnline {
+      :Log event sheets_write_success;
+      :Send immediate confirmation;
     }
+    stop
   else (no)
-    partition Bot {
-      :Log event json_validation_failed;
-      :Put full raw LLM response into comment;
-      :Set status = PROCESSED_FROM_QUEUE_FALLBACK;
+    partition BotOnline {
+      :Log event classification_failed;
+      :Send processing error;
     }
+    stop
   endif
 
-  partition GoogleSheets {
-    :Write row to data_facts:
-raw_text + extracted fields + audit fields;
-  }
+else (no)
+  if (Timeout?) then (yes)
+    partition BotOnline {
+      :Log event llm_timeout;
+      :Build QueueTask;
+      :Enqueue message to queue repository;
+    }
 
-  partition Bot {
-    :Log event sheets_write_success;
-    :Send post-factum notification:
-"Queued message has been recorded";
-    :Log event post_factum_notification_sent;
-  }
-  stop
+    if (Enqueue successful?) then (yes)
+      partition BotOnline {
+        :Log event queue_enqueued;
+        :Send queued notice;
+      }
+      stop
+    else (no)
+      partition BotOnline {
+        :Log event queue_enqueue_failed;
+        :Send processing error;
+      }
+      stop
+    endif
+  else (error)
+    partition BotOnline {
+      :Log event classification_failed;
+      :Send processing error;
+    }
+    stop
+  endif
 endif
 
 note right
+  Queue worker flow is documented separately in:
+  docs/uml/reporting_queue_worker_activity.puml
+
   Structured logging contract:
   docs/logging/logging_spec.md
-end note
-
-note left
-  On Google Sheets write error:
-  log event sheets_write_failed (ERROR)
 end note
 
 @enduml
