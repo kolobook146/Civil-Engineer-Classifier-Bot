@@ -21,6 +21,8 @@ from observability.logging_service import LoggingService
 
 from .fallback_mapper import FallbackMapper
 from .json_schema_validator import JsonSchemaValidator
+from .decimal_volume import parse_decimal_volume
+from .llm_payload_normalizer import LLMPayloadNormalizer
 from .prompt_builder import PromptBuilder
 
 
@@ -35,6 +37,7 @@ class ClassificationOrchestrator:
         google_sheets_repository: GoogleSheetsRepository,
         prompt_builder: PromptBuilder,
         json_schema_validator: JsonSchemaValidator,
+        llm_payload_normalizer: LLMPayloadNormalizer,
         fallback_mapper: FallbackMapper,
         logging_service: LoggingService,
         correlation_id_factory: CorrelationIdFactory,
@@ -47,6 +50,7 @@ class ClassificationOrchestrator:
         self._google_sheets_repository = google_sheets_repository
         self._prompt_builder = prompt_builder
         self._json_schema_validator = json_schema_validator
+        self._llm_payload_normalizer = llm_payload_normalizer
         self._fallback_mapper = fallback_mapper
         self._logging_service = logging_service
         self._correlation_id_factory = correlation_id_factory
@@ -150,8 +154,12 @@ class ClassificationOrchestrator:
             },
         )
 
-        validation_result = self._json_schema_validator.validate(
+        normalization_result = self._llm_payload_normalizer.normalize(
             result_json=llm_raw_response,
+            dictionary=dictionary,
+        )
+        validation_result = self._json_schema_validator.validate(
+            result_json=normalization_result.normalized_json,
             dictionary=dictionary,
         )
         has_errors = not validation_result.is_valid
@@ -162,7 +170,11 @@ class ClassificationOrchestrator:
                 if from_queue
                 else ProcessingStatus.PROCESSED_WITH_FALLBACK
             )
-            classification = self._fallback_mapper.map_invalid(raw_llm_response=llm_raw_response)
+            classification = self._fallback_mapper.map_invalid(
+                raw_llm_response=llm_raw_response,
+                validation_errors=validation_result.errors,
+                normalization_notes=normalization_result.notes,
+            )
             self._logging_service.warning(
                 event=LogEvent.json_validation_failed,
                 component="json_schema_validator",
@@ -177,6 +189,8 @@ class ClassificationOrchestrator:
                 payload={
                     "validation_errors_count": len(validation_result.errors),
                     "validation_errors": list(validation_result.errors),
+                    "normalization_notes_count": len(normalization_result.notes),
+                    "normalization_notes": list(normalization_result.notes),
                 },
             )
         else:
@@ -193,7 +207,11 @@ class ClassificationOrchestrator:
                     processing_path=processing_path,
                     status=status.value,
                 ),
-                payload={"validation_errors_count": 0},
+                payload={
+                    "validation_errors_count": 0,
+                    "normalization_notes_count": len(normalization_result.notes),
+                    "normalization_notes": list(normalization_result.notes),
+                },
             )
 
         record = DataFactRecord(
@@ -219,8 +237,9 @@ class ClassificationOrchestrator:
 
     @staticmethod
     def _build_result(payload: dict[str, Any]) -> ClassificationResult:
+        volume = parse_decimal_volume(payload.get("volume"))
         return ClassificationResult(
-            volume=payload["volume"],
+            volume=volume,
             unit=payload["unit"],
             work_type=payload["workType"],
             stage=payload["stage"],

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from .enums import ProcessingStatus
 
@@ -16,22 +17,29 @@ class TelegramMessageMeta:
 
 @dataclass(frozen=True, slots=True)
 class ClassificationResult:
-    volume: str | None
+    volume: Decimal | None
     unit: str | None
     work_type: str | None
     stage: str | None
     function: str | None
     comment: str | None
 
-    def as_json_dict(self) -> dict[str, str | None]:
+    def as_json_dict(self) -> dict[str, str | int | float | None]:
+        volume_value = None if self.volume is None else self._decimal_to_json_number(self.volume)
         return {
-            "volume": self.volume,
+            "volume": volume_value,
             "unit": self.unit,
             "workType": self.work_type,
             "stage": self.stage,
             "function": self.function,
             "comment": self.comment,
         }
+
+    @staticmethod
+    def _decimal_to_json_number(value: Decimal) -> int | float:
+        if value == value.to_integral_value():
+            return int(value)
+        return float(value)
 
 
 @dataclass(frozen=True, slots=True)

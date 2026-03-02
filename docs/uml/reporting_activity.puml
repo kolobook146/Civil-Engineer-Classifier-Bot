@@ -36,7 +36,7 @@ partition BotOnline {
   :Log event message_received;
   :Preprocess text (trim, normalize spaces);
   :Build TelegramMessageMeta;
-  :Load dictionaries from text files;
+  :Load dictionaries from text files (units/work types/stages/functions);
   :Build Gemini prompt;
   :Call Gemini via google-genai SDK (timeout 30 sec);
 }
@@ -44,7 +44,7 @@ partition BotOnline {
 if (Gemini call successful?) then (yes)
   partition BotOnline {
     :Log event llm_response_received;
-    :Validate JSON schema + dictionary constraints;
+    :Validate JSON schema + dictionary constraints (including unit);
   }
 
   if (JSON valid?) then (yes)

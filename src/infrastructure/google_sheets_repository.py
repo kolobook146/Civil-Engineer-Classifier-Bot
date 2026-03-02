@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Final
 
@@ -33,6 +34,9 @@ _DEFAULT_COLUMNS: Final[tuple[str, ...]] = (
     "classifier_version",
     "status",
 )
+_LEGACY_HEADER_ALIASES: Final[dict[str, str]] = {
+    "workType": "work_type",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,13 +138,28 @@ class GoogleSheetsRepository:
             worksheet.update("A1", [headers])
             return headers
 
-        headers = [cell.strip() for cell in header_row if cell.strip()]
+        original_headers = [cell.strip() for cell in header_row if cell.strip()]
+        headers = self._normalize_headers(original_headers)
         missing_columns = [column for column in _DEFAULT_COLUMNS if column not in headers]
         if missing_columns:
             headers.extend(missing_columns)
+
+        if headers != original_headers:
             worksheet.update("A1", [headers])
 
         return headers
+
+    @staticmethod
+    def _normalize_headers(headers: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for column in headers:
+            canonical = _LEGACY_HEADER_ALIASES.get(column, column)
+            if canonical in seen:
+                continue
+            normalized.append(canonical)
+            seen.add(canonical)
+        return normalized
 
     @staticmethod
     def _build_row_payload(record: DataFactRecord) -> dict[str, str]:
@@ -153,10 +172,9 @@ class GoogleSheetsRepository:
 
         return {
             "raw_text": record.raw_text,
-            "volume": classification.volume or "",
+            "volume": GoogleSheetsRepository._format_volume(classification.volume),
             "unit": classification.unit or "",
             "work_type": classification.work_type or "",
-            "workType": classification.work_type or "",
             "stage": classification.stage or "",
             "function": classification.function or "",
             "comment": classification.comment or "",
@@ -168,6 +186,15 @@ class GoogleSheetsRepository:
             "classifier_version": audit.classifier_version,
             "status": audit.status.value,
         }
+
+    @staticmethod
+    def _format_volume(value: Decimal | None) -> str:
+        if value is None:
+            return ""
+        text = format(value, "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text
 
     @staticmethod
     def _iso8601(value: datetime) -> str:

@@ -15,7 +15,7 @@ if (Task found?) then (yes)
     partition QueueWorker {
       :Log event queue_dequeued;
       :Build TelegramMessageMeta;
-      :Load dictionaries from text files;
+      :Load dictionaries from text files (units/work types/stages/functions);
       :Build Gemini prompt from queued payload;
       :Call Gemini via google-genai SDK;
     }
@@ -23,7 +23,7 @@ if (Task found?) then (yes)
     if (Gemini call successful?) then (yes)
       partition QueueWorker {
         :Log event llm_response_received;
-        :Validate JSON schema + dictionary constraints;
+        :Validate JSON schema + dictionary constraints (including unit);
       }
 
       if (JSON valid?) then (yes)

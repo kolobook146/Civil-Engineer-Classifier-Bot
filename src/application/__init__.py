@@ -11,6 +11,7 @@ from domain.models import (
 from .classification_orchestrator import ClassificationOrchestrator
 from .fallback_mapper import FallbackMapper
 from .json_schema_validator import JsonSchemaValidator, ValidationResult
+from .llm_payload_normalizer import LLMPayloadNormalizer, PayloadNormalizationResult
 from .message_preprocessor import MessagePreprocessor
 from .prompt_builder import PromptBuilder
 from .queue_worker import QueueWorker
@@ -23,7 +24,9 @@ __all__ = [
     "DataFactRecord",
     "FallbackMapper",
     "JsonSchemaValidator",
+    "LLMPayloadNormalizer",
     "MessagePreprocessor",
+    "PayloadNormalizationResult",
     "ProcessingStatus",
     "PromptBuilder",
     "QueueWorker",

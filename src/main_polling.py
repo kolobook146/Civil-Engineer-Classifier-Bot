@@ -3,6 +3,7 @@ from __future__ import annotations
 from application.classification_orchestrator import ClassificationOrchestrator
 from application.fallback_mapper import FallbackMapper
 from application.json_schema_validator import JsonSchemaValidator
+from application.llm_payload_normalizer import LLMPayloadNormalizer
 from application.message_preprocessor import MessagePreprocessor
 from application.prompt_builder import PromptBuilder
 from config.settings import Settings, load_settings
@@ -39,6 +40,7 @@ def build_application(
     message_preprocessor = MessagePreprocessor()
     prompt_builder = PromptBuilder()
     json_schema_validator = JsonSchemaValidator()
+    llm_payload_normalizer = LLMPayloadNormalizer()
     fallback_mapper = FallbackMapper()
     dictionary_repository = DictionaryRepository(settings.dictionaries)
     google_sheets_repository = GoogleSheetsRepository(
@@ -59,6 +61,7 @@ def build_application(
         google_sheets_repository=google_sheets_repository,
         prompt_builder=prompt_builder,
         json_schema_validator=json_schema_validator,
+        llm_payload_normalizer=llm_payload_normalizer,
         fallback_mapper=fallback_mapper,
         logging_service=logging_service,
         correlation_id_factory=correlation_id_factory,

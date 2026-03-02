@@ -81,12 +81,12 @@
     <bpmn:serviceTask id="TG_ReceivePollingUpdate" name="Receive Update (Polling)"/>
 
     <bpmn:serviceTask id="Bot_PreprocessText" name="Preprocess text: trim + normalize spaces + log message_received"/>
-    <bpmn:serviceTask id="Bot_LoadDictionariesOnline" name="Load dictionaries from text files (work types/stages/functions)"/>
+    <bpmn:serviceTask id="Bot_LoadDictionariesOnline" name="Load dictionaries from text files (units/work types/stages/functions)"/>
     <bpmn:serviceTask id="Bot_BuildPromptOnline" name="Build Gemini prompt: dictionaries + normalized/raw text"/>
     <bpmn:serviceTask id="Bot_CallGeminiOnline" name="Call Gemini (timeout 30s) + log llm_response_received/llm_timeout"/>
     <bpmn:exclusiveGateway id="Gateway_OnlineLlmReplied" name="Gemini call outcome?"/>
 
-    <bpmn:serviceTask id="Bot_ValidateJsonOnline" name="Validate JSON schema + dictionary constraints"/>
+    <bpmn:serviceTask id="Bot_ValidateJsonOnline" name="Validate JSON schema + dictionary constraints (including unit)"/>
     <bpmn:exclusiveGateway id="Gateway_OnlineJsonValid" name="JSON valid?"/>
     <bpmn:serviceTask id="Bot_MapValidOnline" name="Map valid payload (status=PROCESSED) + log json_validation_passed"/>
     <bpmn:serviceTask id="Bot_MapFallbackOnline" name="Map fallback payload (status=PROCESSED_WITH_FALLBACK) + log json_validation_failed"/>
@@ -105,13 +105,13 @@
     </bpmn:startEvent>
 
     <bpmn:serviceTask id="Queue_PickPendingMessage" name="Pick oldest pending queue item (recover processing->pending on startup)"/>
-    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue worker: load dictionaries"/>
+    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue worker: load dictionaries (units/work types/stages/functions)"/>
     <bpmn:serviceTask id="Queue_BuildPrompt" name="Queue worker: build Gemini prompt"/>
     <bpmn:serviceTask id="Queue_CallGemini" name="Queue worker: call Gemini"/>
     <bpmn:exclusiveGateway id="Gateway_QueueLlmTimeout" name="Queue Gemini call outcome?"/>
     <bpmn:serviceTask id="Queue_RequeueOnTimeout" name="Requeue task (reason=llm_timeout) + log queue_enqueued"/>
 
-    <bpmn:serviceTask id="Queue_ValidateJson" name="Queue worker: validate JSON schema + dictionary constraints"/>
+    <bpmn:serviceTask id="Queue_ValidateJson" name="Queue worker: validate JSON schema + dictionary constraints (including unit)"/>
     <bpmn:exclusiveGateway id="Gateway_QueueJsonValid" name="Queue JSON valid?"/>
     <bpmn:serviceTask id="Queue_MapValid" name="Map valid payload (status=PROCESSED_FROM_QUEUE)"/>
     <bpmn:serviceTask id="Queue_MapFallback" name="Map fallback payload (status=PROCESSED_FROM_QUEUE_FALLBACK)"/>

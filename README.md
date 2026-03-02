@@ -55,6 +55,7 @@ Out of scope for the pilot (post-pilot):
    - `trim`;
    - whitespace normalization.
 3. Dictionaries are loaded from project text files:
+   - units;
    - work types;
    - stages;
    - functions.
@@ -68,8 +69,8 @@ Out of scope for the pilot (post-pilot):
 ### 3.3 Classification Rules
 
 The LLM must return JSON with the following fields:
-- `volume` (optional, `string` in the pilot);
-- `unit` (optional);
+- `volume` (optional, decimal `number`);
+- `unit` (optional, one dictionary value or `null`);
 - `workType` (one dictionary value or `null`);
 - `stage` (one dictionary value or `null`);
 - `function` (one dictionary value or `null`);
@@ -124,7 +125,7 @@ If the LLM does not respond within 30 seconds:
 ### 4.3 Data Quality
 
 - Strict JSON validation before persistence.
-- `workType`, `stage`, and `function` must be single-value (`one value or null`).
+- `unit`, `workType`, `stage`, and `function` must be single-value (`one value or null`) and must belong to their dictionaries.
 
 ### 4.4 Maintainability
 
@@ -161,8 +162,8 @@ If the LLM does not respond within 30 seconds:
 - No roles or access control.
 - No edit/cancel flow for previously recorded entries.
 - No deduplication by `chat_id + message_id`.
-- No unit-normalization dictionary (variation is left to the LLM).
-- `volume` is stored as `string` in the pilot.
+- Unit aliases normalization is still out of scope (verification is done against the units dictionary).
+- `volume` is stored as `Decimal` in the domain model and persisted as normalized decimal text in Google Sheets.
 
 ## 8. Preferred Technologies
 

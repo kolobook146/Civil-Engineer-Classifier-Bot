@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from observability.correlation_id_factory import CorrelationIdFactory
 from observability.log_context import LogContext
 from observability.log_events import LogEvent
@@ -11,6 +9,15 @@ from telegram import Bot, InlineKeyboardMarkup, Message
 
 class NotificationService:
     """Outbound user messages for Telegram interactions."""
+    _FIELD_ORDER: tuple[str, ...] = (
+        "volume",
+        "unit",
+        "workType",
+        "stage",
+        "function",
+        "comment",
+    )
+    _MAX_COMMENT_PREVIEW_CHARS = 700
 
     def __init__(
         self,
@@ -51,12 +58,12 @@ class NotificationService:
         self,
         *,
         target_message: Message,
-        classification_payload: dict[str, str | None],
+        classification_payload: dict[str, str | int | float | None],
         status: str,
     ) -> None:
-        formatted_payload = json.dumps(classification_payload, ensure_ascii=False)
+        formatted_payload = self._format_payload_for_user(classification_payload)
         await target_message.reply_text(
-            f"Recorded data: {formatted_payload}\n"
+            f"Recorded data:\n{formatted_payload}\n"
             f"Status: {status}"
         )
 
@@ -77,16 +84,16 @@ class NotificationService:
         chat_id: str,
         user_id: str,
         message_id: str,
-        classification_payload: dict[str, str | None],
+        classification_payload: dict[str, str | int | float | None],
         status: str,
     ) -> None:
-        formatted_payload = json.dumps(classification_payload, ensure_ascii=False)
+        formatted_payload = self._format_payload_for_user(classification_payload)
         chat_ref: int | str = int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
         await bot.send_message(
             chat_id=chat_ref,
             text=(
                 "Queued message has been recorded.\n"
-                f"Recorded data: {formatted_payload}\n"
+                f"Recorded data:\n{formatted_payload}\n"
                 f"Status: {status}"
             ),
         )
@@ -102,3 +109,38 @@ class NotificationService:
                 status=status,
             ),
         )
+
+    @classmethod
+    def _format_payload_for_user(cls, payload: dict[str, str | int | float | None]) -> str:
+        lines: list[str] = []
+        for field in cls._FIELD_ORDER:
+            value = payload.get(field)
+            if field == "comment":
+                display = cls._format_comment_preview(value)
+            else:
+                display = cls._format_scalar(value)
+            lines.append(f"- {field}: {display}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_scalar(value: str | int | float | None) -> str:
+        if value is None:
+            return "null"
+        if isinstance(value, (int, float)):
+            return str(value)
+        normalized = value.strip()
+        return normalized if normalized else "null"
+
+    @classmethod
+    def _format_comment_preview(cls, value: str | int | float | None) -> str:
+        scalar = cls._format_scalar(value)
+        if scalar == "null":
+            return scalar
+
+        single_line = scalar.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " | ")
+        if len(single_line) <= cls._MAX_COMMENT_PREVIEW_CHARS:
+            return single_line
+
+        omitted = len(single_line) - cls._MAX_COMMENT_PREVIEW_CHARS
+        preview = single_line[: cls._MAX_COMMENT_PREVIEW_CHARS].rstrip()
+        return f"{preview} ... [truncated {omitted} chars]"

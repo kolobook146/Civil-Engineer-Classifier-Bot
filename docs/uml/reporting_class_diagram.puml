@@ -41,6 +41,7 @@ package "Config" {
     +work_types_file: Path
     +stages_file: Path
     +functions_file: Path
+    +units_file: Path
   }
 
   class GoogleSheetsSettings {
@@ -130,7 +131,7 @@ package "Domain" {
   }
 
   class ClassificationResult {
-    +volume: str?
+    +volume: Decimal?
     +unit: str?
     +work_type: str?
     +stage: str?
@@ -184,6 +185,7 @@ package "Domain" {
 
 package "Infrastructure" {
   class ClassificationDictionary {
+    +units: tuple
     +work_types: tuple
     +stages: tuple
     +functions: tuple

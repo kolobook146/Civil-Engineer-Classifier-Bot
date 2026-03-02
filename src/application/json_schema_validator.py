@@ -9,6 +9,8 @@ from jsonschema import ValidationError, validate
 
 from infrastructure.dictionary_repository import ClassificationDictionary
 
+from .unit_key_normalizer import normalize_unit_key
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
@@ -73,10 +75,19 @@ class JsonSchemaValidator:
             )
 
         if dictionary is not None:
+            unit = payload.get("unit")
             work_type = payload.get("workType")
             stage = payload.get("stage")
             function = payload.get("function")
 
+            if isinstance(unit, str):
+                canonical_unit = normalize_unit_key(unit, dictionary.units)
+                if canonical_unit is not None:
+                    payload["unit"] = canonical_unit
+                    unit = canonical_unit
+
+            if unit is not None and unit not in dictionary.units:
+                errors.append("unit_not_in_dictionary")
             if work_type is not None and work_type not in dictionary.work_types:
                 errors.append("workType_not_in_dictionary")
             if stage is not None and stage not in dictionary.stages:

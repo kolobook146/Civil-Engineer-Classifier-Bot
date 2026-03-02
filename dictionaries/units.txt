@@ -1,0 +1,55 @@
+unit	description
+%	Percent; a share of 100 used for progress or deviation.
+g	Gram; a small unit of material mass, including the Russian notation "г".
+kg	Kilogram; the base unit of material mass, including the Russian notation "кг".
+t	Tonne; a large unit of cargo and material mass, including the Russian notation "т".
+
+mm	Millimeter; a small unit of length or thickness, including the Russian notation "мм".
+cm	Centimeter; a length unit for small dimensions, including the Russian notation "см".
+dm	Decimeter; a length unit equal to 0.1 meter, including the Russian notation "дм".
+m	Meter; the base unit of length, including linear-run variants such as "м", "м.п.", "п.м.", and "пог.м.".
+km	Kilometer; used for long routes, lines, and utility networks, including the Russian notation "км".
+
+mm2	Square millimeter; a small cross-sectional area unit, including the Russian notation "мм2".
+cm2	Square centimeter; a small surface area unit, including the Russian notation "см2".
+dm2	Square decimeter; an area unit equal to 0.01 m2, including the Russian notation "дм2".
+m2	Square meter; the base area unit, including "м2" and "м²".
+km2	Square kilometer; a large land area unit, including the Russian notation "км2".
+ha	Hectare; an area equal to 10,000 m2, including the Russian notation "га".
+
+cm3	Cubic centimeter; a small volume unit, including the Russian notation "см3".
+dm3	Cubic decimeter; equal to 1 liter, including the Russian notation "дм3".
+l	Liter; used for liquids and mixtures, including the Russian notation "л".
+ml	Milliliter; a small liquid volume unit, including the Russian notation "мл".
+m3	Cubic meter; the base volume unit, including "м3", "м³", and "кубов".
+
+pcs	Piece; used for counting individual items, including "шт" and "шт.".
+unit	Unit; a generic per-item counting unit, including the Russian notation "ед".
+pair	Pair; used for items counted in twos, including the Russian notation "пара".
+
+set	Set; a group of related elements, including "компл", "компл.", and "комплект".
+
+node	Node; an assembly unit within a structure or system, including the Russian notation "узел".
+system	System; a functionally connected set of nodes, including the Russian notation "система".
+joint	Joint; the connection point between two elements, including the Russian notation "стык".
+connection	Connection; a counting unit for completed connections, including the Russian notation "соединение".
+link	Link; a single element in a chain or line, including the Russian notation "звено".
+block	Block; a large assembled structural element, including the Russian notation "блок".
+panel	Panel; a flat structural element, including the Russian notation "панель".
+slab	Slab; a rigid structural element of a base or covering, including the Russian notation "плита".
+sheet	Sheet; a unit of sheet material, including the Russian notation "лист".
+roll	Roll; a unit of rolled material, including the Russian notation "рулон".
+grille	Grille; a gridded structural element, including the Russian notation "решетка".
+line	Line; a linear segment of a network or work scope, including the Russian notation "линия".
+contour	Contour; a closed or defined line, including the Russian notation "контур".
+point	Point; a local work execution position, including the Russian notation "точка".
+opening	Opening; a single drilling or penetration operation, including the Russian notation "отверстие".
+borehole	Borehole; a single drilled object, including the Russian notation "скважина".
+element	Element; a distinct part of a structure, including the Russian notation "элемент".
+item	Item; a single finished product unit, including the Russian notation "изделие".
+device	Device; a separate functional assembly, including the Russian notation "устройство".
+
+V	Volt; the unit of electrical voltage, including the Russian notation "В".
+A	Ampere; the unit of electrical current, including the Russian notation "А".
+kW	Kilowatt; the unit of active electrical power, including the Russian notation "кВт".
+kVA	Kilovolt-ampere; the unit of apparent electrical power, including the Russian notation "кВА".

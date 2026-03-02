@@ -85,6 +85,7 @@ class DictionarySettings:
     work_types_file: Path
     stages_file: Path
     functions_file: Path
+    units_file: Path
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,7 @@ def load_settings() -> Settings:
             work_types_file=Path(_get_env("WORK_TYPES_FILE", str(dictionaries_dir / "work_types.txt"))),
             stages_file=Path(_get_env("STAGES_FILE", str(dictionaries_dir / "stages.txt"))),
             functions_file=Path(_get_env("FUNCTIONS_FILE", str(dictionaries_dir / "functions.txt"))),
+            units_file=Path(_get_env("UNITS_FILE", str(dictionaries_dir / "units.txt"))),
         ),
         google_sheets=GoogleSheetsSettings(
             service_account_file=Path(
