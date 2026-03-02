@@ -54,6 +54,20 @@ class DictionaryRepository:
         """Compatibility alias with UML naming."""
         return self.load_from_text_files()
 
+    def preflight_check(self) -> ClassificationDictionary:
+        dictionary = self.load_from_text_files()
+
+        if not dictionary.work_types:
+            raise RuntimeError("work types dictionary is empty")
+        if not dictionary.stages:
+            raise RuntimeError("stages dictionary is empty")
+        if not dictionary.functions:
+            raise RuntimeError("functions dictionary is empty")
+        if not dictionary.units:
+            raise RuntimeError("units dictionary is empty")
+
+        return dictionary
+
     @staticmethod
     def _read_dictionary_values(path: Path) -> tuple[str, ...]:
         values, _ = DictionaryRepository._read_dictionary_values_with_descriptions(path)

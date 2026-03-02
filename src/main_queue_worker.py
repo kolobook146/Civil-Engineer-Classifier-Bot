@@ -8,6 +8,7 @@ from application.json_schema_validator import JsonSchemaValidator
 from application.llm_payload_normalizer import LLMPayloadNormalizer
 from application.prompt_builder import PromptBuilder
 from application.queue_worker import QueueWorker
+from application.startup_preflight import StartupPreflight
 from config.settings import Settings, load_settings
 from dotenv import load_dotenv
 from infrastructure.dictionary_repository import DictionaryRepository
@@ -89,6 +90,23 @@ def main() -> None:
 
     logging_service = configure_logging(settings)
     correlation_id_factory = CorrelationIdFactory()
+    StartupPreflight(
+        dictionary_repository=DictionaryRepository(settings.dictionaries),
+        gemini_client=GeminiClient(
+            api_key=settings.llm.api_key,
+            model=settings.llm.model,
+            timeout_seconds=settings.llm.timeout_seconds,
+            base_url=settings.llm.base_url,
+        ),
+        google_sheets_repository=GoogleSheetsRepository(
+            settings.google_sheets,
+            logging_service=logging_service,
+            correlation_id_factory=correlation_id_factory,
+        ),
+        logging_service=logging_service,
+        processing_path="queue",
+        llm_timeout_seconds=settings.llm.timeout_seconds,
+    ).run()
     queue_worker, bot = build_queue_worker(
         settings,
         logging_service=logging_service,

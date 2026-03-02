@@ -9,7 +9,7 @@ description = "Telegram bot for structured construction progress reporting"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "python-telegram-bot>=21.0,<22.0",
+  "python-telegram-bot[webhooks]>=21.0,<22.0",
   "google-genai>=1.49.0,<2.0.0",
   "jsonschema>=4.22.0,<5.0.0",
   "gspread>=6.1.0,<7.0.0",

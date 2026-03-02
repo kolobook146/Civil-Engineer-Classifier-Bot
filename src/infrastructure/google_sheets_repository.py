@@ -102,6 +102,14 @@ class GoogleSheetsRepository:
         """Compatibility alias with UML naming."""
         return self.append_data_fact(record)
 
+    def preflight_check(self) -> dict[str, int | str]:
+        worksheet = self._get_or_create_worksheet()
+        headers = self._ensure_headers(worksheet)
+        return {
+            "worksheet_name": worksheet.title,
+            "header_count": len(headers),
+        }
+
     def _get_or_create_worksheet(self):
         if self._worksheet is not None:
             return self._worksheet

@@ -15,6 +15,7 @@ from .llm_payload_normalizer import LLMPayloadNormalizer, PayloadNormalizationRe
 from .message_preprocessor import MessagePreprocessor
 from .prompt_builder import PromptBuilder
 from .queue_worker import QueueWorker
+from .startup_preflight import StartupPreflight, StartupPreflightResult
 
 __all__ = [
     "AuditFields",
@@ -30,6 +31,8 @@ __all__ = [
     "ProcessingStatus",
     "PromptBuilder",
     "QueueWorker",
+    "StartupPreflight",
+    "StartupPreflightResult",
     "TelegramMessageMeta",
     "ValidationResult",
     "build_message_meta",

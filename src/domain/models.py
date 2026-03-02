@@ -77,6 +77,8 @@ class QueueTask:
     normalized_text: str | None
     received_at: datetime
     enqueued_at: datetime
+    attempt_count: int
+    next_attempt_at: datetime
 
 
 def build_message_meta(
@@ -114,4 +116,6 @@ def build_queue_task(
         normalized_text=normalized_text,
         received_at=received_at or now,
         enqueued_at=enqueued_at or now,
+        attempt_count=0,
+        next_attempt_at=enqueued_at or now,
     )

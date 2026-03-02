@@ -86,6 +86,18 @@ class GeminiClient:
 
         return text.strip()
 
+    def preflight_check(self, *, timeout_seconds: int | None = None) -> dict[str, int | str]:
+        effective_timeout_seconds = timeout_seconds or min(5, self._timeout_seconds)
+        response = self.classify(
+            'Return exactly this JSON object and nothing else: {"ok": true}',
+            timeout_seconds=effective_timeout_seconds,
+        )
+        return {
+            "llm_model": self._model,
+            "llm_preflight_timeout_seconds": effective_timeout_seconds,
+            "llm_preflight_response_length": len(response),
+        }
+
     def _extract_text(self, response: object) -> str:
         text = getattr(response, "text", None)
         if isinstance(text, str) and text.strip():

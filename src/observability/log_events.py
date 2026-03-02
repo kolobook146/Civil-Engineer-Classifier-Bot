@@ -5,8 +5,12 @@ from enum import StrEnum
 
 class LogEvent(StrEnum):
     polling_started = "polling_started"
+    webhook_started = "webhook_started"
     queue_worker_bootstrap_started = "queue_worker_bootstrap_started"
     queue_worker_started = "queue_worker_started"
+    startup_preflight_started = "startup_preflight_started"
+    startup_preflight_passed = "startup_preflight_passed"
+    startup_preflight_failed = "startup_preflight_failed"
     message_received = "message_received"
     llm_response_received = "llm_response_received"
     llm_timeout = "llm_timeout"

@@ -72,6 +72,17 @@ class TelegramSettings:
 
 
 @dataclass(frozen=True)
+class WebhookSettings:
+    listen_host: str
+    listen_port: int
+    path: str
+    public_base_url: str
+    secret_token: str
+    drop_pending_updates: bool
+    max_connections: int
+
+
+@dataclass(frozen=True)
 class LLMSettings:
     base_url: str
     api_key: str
@@ -115,6 +126,7 @@ class LoggingSettings:
 class Settings:
     app: AppSettings
     telegram: TelegramSettings
+    webhook: WebhookSettings
     llm: LLMSettings
     dictionaries: DictionarySettings
     google_sheets: GoogleSheetsSettings
@@ -136,6 +148,16 @@ class Settings:
         if not self.google_sheets.spreadsheet_id:
             raise RuntimeError("GOOGLE_SHEETS_SPREADSHEET_ID is required")
 
+    def validate_for_webhook(self) -> None:
+        self.validate_for_full_pipeline()
+
+        if not self.webhook.path.strip().strip("/"):
+            raise RuntimeError("WEBHOOK_PATH is required")
+        if not self.webhook.public_base_url:
+            raise RuntimeError("WEBHOOK_PUBLIC_BASE_URL is required")
+        if not self.webhook.public_base_url.startswith("https://"):
+            raise RuntimeError("WEBHOOK_PUBLIC_BASE_URL must start with https://")
+
 
 def load_settings() -> Settings:
     dictionaries_dir = Path(_get_env("DICTIONARIES_DIR", "dictionaries"))
@@ -150,6 +172,15 @@ def load_settings() -> Settings:
             polling_timeout_seconds=_get_int_env("TG_POLLING_TIMEOUT_SECONDS", 30),
             poll_interval_seconds=_get_float_env("TG_POLL_INTERVAL_SECONDS", 1.0),
             allowed_updates=_parse_allowed_updates(_get_env("TG_ALLOWED_UPDATES", "message")),
+        ),
+        webhook=WebhookSettings(
+            listen_host=_get_env("WEBHOOK_LISTEN_HOST", "127.0.0.1"),
+            listen_port=_get_int_env("WEBHOOK_LISTEN_PORT", 8080),
+            path=_get_env("WEBHOOK_PATH", "telegram/webhook"),
+            public_base_url=_get_env("WEBHOOK_PUBLIC_BASE_URL", ""),
+            secret_token=_get_env("WEBHOOK_SECRET_TOKEN", ""),
+            drop_pending_updates=_get_bool_env("WEBHOOK_DROP_PENDING_UPDATES", True),
+            max_connections=_get_int_env("WEBHOOK_MAX_CONNECTIONS", 40),
         ),
         llm=LLMSettings(
             base_url=_get_env("LLM_BASE_URL", ""),

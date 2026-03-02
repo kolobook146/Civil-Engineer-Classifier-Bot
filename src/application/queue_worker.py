@@ -95,6 +95,10 @@ class QueueWorker:
             payload={
                 "queue_id": task.queue_id,
                 "queue_latency_ms": queue_latency_ms,
+                "attempt_count": task.attempt_count,
+                "next_attempt_at": task.next_attempt_at.astimezone(UTC)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z"),
             },
         )
 
@@ -113,7 +117,7 @@ class QueueWorker:
                 meta=meta,
             )
         except LLMTimeoutError:
-            await asyncio.to_thread(
+            retry_result = await asyncio.to_thread(
                 partial(
                     self._queue_repository.requeue,
                     task.queue_id,
@@ -132,13 +136,18 @@ class QueueWorker:
                     status=ProcessingStatus.QUEUED.value,
                 ),
                 payload={
-                    "queue_id": task.queue_id,
+                    "queue_id": retry_result.queue_id,
                     "requeue_reason": "llm_timeout",
+                    "attempt_count": retry_result.attempt_count,
+                    "retry_delay_seconds": retry_result.retry_delay_seconds,
+                    "next_attempt_at": retry_result.next_attempt_at.astimezone(UTC)
+                    .isoformat(timespec="milliseconds")
+                    .replace("+00:00", "Z"),
                 },
             )
             return True
         except Exception as exc:
-            await asyncio.to_thread(
+            retry_result = await asyncio.to_thread(
                 partial(
                     self._queue_repository.requeue,
                     task.queue_id,
@@ -157,9 +166,14 @@ class QueueWorker:
                     status=ProcessingStatus.QUEUED.value,
                 ),
                 payload={
-                    "queue_id": task.queue_id,
+                    "queue_id": retry_result.queue_id,
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
+                    "attempt_count": retry_result.attempt_count,
+                    "retry_delay_seconds": retry_result.retry_delay_seconds,
+                    "next_attempt_at": retry_result.next_attempt_at.astimezone(UTC)
+                    .isoformat(timespec="milliseconds")
+                    .replace("+00:00", "Z"),
                 },
             )
             return True

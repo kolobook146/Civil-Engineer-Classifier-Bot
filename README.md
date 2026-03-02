@@ -23,7 +23,7 @@ Build a pilot system that:
 ## 2. Pilot Scope
 
 In scope for the pilot:
-- Telegram `polling` (not webhook);
+- Telegram `polling` by default, plus an optional built-in `webhook` mode for local development via `ngrok`;
 - LLM classification using Google Gemini (`gemini-2.5-flash`) via the native `google-genai` SDK with a 30-second timeout;
 - strict JSON validation of the LLM output before persistence;
 - fallback logic for invalid JSON;
@@ -50,7 +50,7 @@ Out of scope for the pilot (post-pilot):
 
 ### 3.2 Message Processing
 
-1. The bot receives updates via Telegram `polling`.
+1. The bot receives updates via Telegram `polling` or built-in `webhook`.
 2. Text preprocessing is applied:
    - `trim`;
    - whitespace normalization.
@@ -158,7 +158,7 @@ If the LLM does not respond within 30 seconds:
 
 ## 7. Pilot Constraints
 
-- `polling` only (no webhook).
+- `polling` is the default runtime mode; webhook requires a public HTTPS endpoint (for local dev, e.g. `ngrok`).
 - No roles or access control.
 - No edit/cancel flow for previously recorded entries.
 - No deduplication by `chat_id + message_id`.
@@ -168,7 +168,7 @@ If the LLM does not respond within 30 seconds:
 ## 8. Preferred Technologies
 
 - Language: Python 3.11+.
-- Telegram: `python-telegram-bot` (polling mode).
+- Telegram: `python-telegram-bot` (polling mode and built-in webhook mode).
 - Schema validation: `jsonschema` or `pydantic`.
 - LLM SDK: `google-genai` (native Gemini SDK).
 - Google Sheets: `gspread` + Google service account.
@@ -239,7 +239,42 @@ cd "/Users/kolobook/Documents/TG Build Bot"
 PYTHONPATH=src python3 src/main_queue_worker.py
 ```
 
-### 11.4 Stop
+### 11.4 Optional Webhook Mode (Local Development via ngrok)
+
+Use this mode if you want Telegram to push updates to a local built-in webhook server instead of polling.
+
+1. Start the queue worker in Terminal 1:
+
+```bash
+cd "/Users/kolobook/Documents/TG Build Bot"
+PYTHONPATH=src python3 src/main_queue_worker.py
+```
+
+2. Start an HTTPS tunnel to the local webhook port in Terminal 2:
+
+```bash
+ngrok http 8080
+```
+
+3. Copy the public `https://...` URL shown by `ngrok` and set it in `.env`:
+- `WEBHOOK_PUBLIC_BASE_URL=https://<your-ngrok-domain>`
+
+4. Start the webhook bot in Terminal 3:
+
+```bash
+cd "/Users/kolobook/Documents/TG Build Bot"
+PYTHONPATH=src python3 src/main_webhook.py
+```
+
+5. Telegram will now send updates to:
+- `https://<your-ngrok-domain>/telegram/webhook`
+
+Notes:
+- If the `ngrok` URL changes, update `WEBHOOK_PUBLIC_BASE_URL` and restart `src/main_webhook.py`.
+- `WEBHOOK_SECRET_TOKEN` is optional but recommended.
+- The local server listens on `WEBHOOK_LISTEN_HOST:WEBHOOK_LISTEN_PORT` (default `127.0.0.1:8080`).
+
+### 11.5 Stop
 
 - Press `Ctrl + C` in each terminal.
 
