@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from infrastructure.dictionary_repository import DictionaryRepository
 from infrastructure.gemini_client import GeminiClient
 from infrastructure.google_sheets_repository import GoogleSheetsRepository
+from infrastructure.pending_confirmation_repository import PendingConfirmationRepository
 from infrastructure.queue_repository import QueueRepository
 from observability.correlation_id_factory import CorrelationIdFactory
 from observability.log_context import LogContext
@@ -49,6 +50,7 @@ def build_queue_worker(
         correlation_id_factory=correlation_id_factory,
     )
     queue_repository = QueueRepository(settings.queue)
+    pending_confirmation_repository = PendingConfirmationRepository(settings.queue)
     gemini_client = GeminiClient(
         api_key=settings.llm.api_key,
         model=settings.llm.model,
@@ -73,6 +75,7 @@ def build_queue_worker(
 
     queue_worker = QueueWorker(
         queue_repository=queue_repository,
+        pending_confirmation_repository=pending_confirmation_repository,
         classification_orchestrator=classification_orchestrator,
         notification_service=notification_service,
         logging_service=logging_service,

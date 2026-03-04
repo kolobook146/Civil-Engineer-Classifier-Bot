@@ -68,6 +68,13 @@ class ClassificationRunResult:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingConfirmation:
+    confirmation_id: str
+    record: DataFactRecord
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class QueueTask:
     queue_id: int | None
     user_id: str

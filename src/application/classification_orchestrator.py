@@ -29,6 +29,8 @@ from .prompt_builder import PromptBuilder
 class ClassificationOrchestrator:
     """Pilot message classification pipeline based on dictionaries and Gemini."""
 
+    _MAX_LLM_RESPONSE_LOG_CHARS = 8000
+
     def __init__(
         self,
         *,
@@ -148,10 +150,10 @@ class ClassificationOrchestrator:
                 processing_path=processing_path,
                 status="PROCESSING",
             ),
-            payload={
-                "llm_model": self._llm_model,
-                "llm_latency_ms": llm_latency_ms,
-            },
+            payload=self._build_llm_response_log_payload(
+                llm_raw_response=llm_raw_response,
+                llm_latency_ms=llm_latency_ms,
+            ),
         )
 
         normalization_result = self._llm_payload_normalizer.normalize(
@@ -227,13 +229,42 @@ class ClassificationOrchestrator:
                 status=status,
             ),
         )
-        self._google_sheets_repository.append_data_fact(record)
 
         return ClassificationRunResult(
             record=record,
             llm_raw_response=llm_raw_response,
             dictionary_version=dictionary.version,
         )
+
+    def persist_record(self, record: DataFactRecord) -> None:
+        self._google_sheets_repository.append_data_fact(record)
+
+    def persistRecord(self, record: DataFactRecord) -> None:
+        """Compatibility alias with UML naming."""
+        self.persist_record(record)
+
+    def _build_llm_response_log_payload(
+        self,
+        *,
+        llm_raw_response: str,
+        llm_latency_ms: int,
+    ) -> dict[str, Any]:
+        response_length = len(llm_raw_response)
+        truncated = response_length > self._MAX_LLM_RESPONSE_LOG_CHARS
+        logged_response = llm_raw_response[: self._MAX_LLM_RESPONSE_LOG_CHARS]
+
+        payload: dict[str, Any] = {
+            "llm_model": self._llm_model,
+            "llm_latency_ms": llm_latency_ms,
+            "llm_response_length": response_length,
+            "llm_raw_response": logged_response,
+            "llm_response_truncated": truncated,
+        }
+        if truncated:
+            payload["llm_response_omitted_chars"] = (
+                response_length - self._MAX_LLM_RESPONSE_LOG_CHARS
+            )
+        return payload
 
     @staticmethod
     def _build_result(payload: dict[str, Any]) -> ClassificationResult:

@@ -1,4 +1,7 @@
 #!/bin/zsh
+# Launch the webhook stack on macOS
+# cd "/Users/kolobook/Documents/TG Build Bot"
+# ./scripts/launch_webhook_stack_macos.sh
 
 set -euo pipefail
 

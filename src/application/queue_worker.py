@@ -7,13 +7,14 @@ from functools import partial
 from domain.enums import ProcessingStatus
 from domain.models import build_message_meta
 from infrastructure.gemini_client import LLMTimeoutError
+from infrastructure.pending_confirmation_repository import PendingConfirmationRepository
 from infrastructure.queue_repository import QueueRepository
 from observability.correlation_id_factory import CorrelationIdFactory
 from observability.log_context import LogContext
 from observability.log_events import LogEvent
 from observability.logging_service import LoggingService
 from presentation.notification_service import NotificationService
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
 from .classification_orchestrator import ClassificationOrchestrator
 
@@ -24,6 +25,7 @@ class QueueWorker:
         self,
         *,
         queue_repository: QueueRepository,
+        pending_confirmation_repository: PendingConfirmationRepository,
         classification_orchestrator: ClassificationOrchestrator,
         notification_service: NotificationService,
         logging_service: LoggingService,
@@ -31,11 +33,35 @@ class QueueWorker:
         poll_interval_seconds: int = 5,
     ) -> None:
         self._queue_repository = queue_repository
+        self._pending_confirmation_repository = pending_confirmation_repository
         self._classification_orchestrator = classification_orchestrator
         self._notification_service = notification_service
         self._logging_service = logging_service
         self._correlation_id_factory = correlation_id_factory
         self._poll_interval_seconds = poll_interval_seconds
+
+    @staticmethod
+    def _build_confirmation_keyboard(confirmation_id: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="Confirm",
+                        callback_data=f"confirm:{confirmation_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Edit",
+                        callback_data=f"edit:{confirmation_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="Cancel",
+                        callback_data=f"cancel:{confirmation_id}",
+                    ),
+                ],
+            ]
+        )
 
     async def run_forever(self, *, bot: Bot) -> None:
         self._logging_service.info(
@@ -178,13 +204,59 @@ class QueueWorker:
             )
             return True
 
+        try:
+            pending_confirmation = await asyncio.to_thread(
+                self._pending_confirmation_repository.create,
+                run_result.record,
+            )
+            await self._notification_service.send_post_factum_confirmation_request(
+                bot=bot,
+                chat_id=task.chat_id,
+                user_id=task.user_id,
+                message_id=task.message_id,
+                classification_payload=run_result.record.classification.as_json_dict(),
+                status=run_result.record.audit.status.value,
+                reply_markup=self._build_confirmation_keyboard(
+                    pending_confirmation.confirmation_id
+                ),
+            )
+        except Exception as exc:
+            if "pending_confirmation" in locals():
+                await asyncio.to_thread(
+                    self._pending_confirmation_repository.delete,
+                    pending_confirmation.confirmation_id,
+                )
+            retry_result = await asyncio.to_thread(
+                partial(
+                    self._queue_repository.requeue,
+                    task.queue_id,
+                    error=f"notification_failed: {type(exc).__name__}: {exc}",
+                )
+            )
+            self._logging_service.error(
+                event=LogEvent.queue_processing_failed,
+                component="queue_worker",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=task.chat_id,
+                    user_id=task.user_id,
+                    message_id=task.message_id,
+                    processing_path="queue",
+                    status=ProcessingStatus.QUEUED.value,
+                ),
+                payload={
+                    "queue_id": retry_result.queue_id,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "post_factum_confirmation_request",
+                    "attempt_count": retry_result.attempt_count,
+                    "retry_delay_seconds": retry_result.retry_delay_seconds,
+                    "next_attempt_at": retry_result.next_attempt_at.astimezone(UTC)
+                    .isoformat(timespec="milliseconds")
+                    .replace("+00:00", "Z"),
+                },
+            )
+            return True
+
         await asyncio.to_thread(self._queue_repository.mark_done, task.queue_id)
-        await self._notification_service.send_post_factum_notification(
-            bot=bot,
-            chat_id=task.chat_id,
-            user_id=task.user_id,
-            message_id=task.message_id,
-            classification_payload=run_result.record.classification.as_json_dict(),
-            status=run_result.record.audit.status.value,
-        )
         return True
