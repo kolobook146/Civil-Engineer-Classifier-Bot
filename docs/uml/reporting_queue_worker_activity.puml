@@ -5,94 +5,110 @@ start
 
 partition QueueWorkerProcess {
   :Log event queue_worker_bootstrap_started;
+  :Run startup preflight for queue path;
   :Log event queue_worker_started;
   :Polling tick (QUEUE_POLL_INTERVAL_SECONDS);
-  :Dequeue oldest pending queue task;
+  :Dequeue oldest due queue task;
 }
 
 if (Task found?) then (yes)
-  if (queue_id present?) then (yes)
+  partition QueueWorker {
+    :Log event queue_dequeued;
+    :Build TelegramMessageMeta;
+    :Load dictionaries from text files;
+    :Build Gemini prompt from queued payload;
+    :Call Gemini via google-genai SDK;
+  }
+
+  if (Gemini call successful?) then (yes)
     partition QueueWorker {
-      :Log event queue_dequeued;
-      :Build TelegramMessageMeta;
-      :Load dictionaries from text files (units/work types/stages/functions);
-      :Build Gemini prompt from queued payload;
-      :Call Gemini via google-genai SDK;
+      :Log event llm_response_received;
+      :Normalize LLM payload;
+      :Validate JSON schema + dictionary constraints;
     }
 
-    if (Gemini call successful?) then (yes)
+    if (JSON valid?) then (yes)
       partition QueueWorker {
-        :Log event llm_response_received;
-        :Validate JSON schema + dictionary constraints (including unit);
+        :Log event json_validation_passed;
+        :Build DataFactRecord;
+        :Set status = PROCESSED_FROM_QUEUE;
       }
-
-      if (JSON valid?) then (yes)
-        partition QueueWorker {
-          :Log event json_validation_passed;
-          :Set status = PROCESSED_FROM_QUEUE;
-        }
-      else (no)
-        partition QueueWorker {
-          :Log event json_validation_failed;
-          :Fallback mapper - full raw LLM response in comment;
-          :Set status = PROCESSED_FROM_QUEUE_FALLBACK;
-        }
-      endif
-
-      partition GoogleSheets {
-        :Append row to data_facts;
-      }
-
-      if (Sheets write successful?) then (yes)
-        partition QueueWorker {
-          :Log event sheets_write_success;
-          :Mark queue task done;
-          :Send post-factum notification;
-          :Log event post_factum_notification_sent;
-        }
-      else (no)
-        partition QueueWorker {
-          :Requeue task;
-          :Log event queue_processing_failed;
-        }
-      endif
-
     else (no)
-      if (Timeout?) then (yes)
-        partition QueueWorker {
-          :Log event llm_timeout;
-          :Requeue task (llm_timeout);
-          :Log event queue_enqueued (requeue_reason=llm_timeout);
-        }
-      else (error)
-        partition QueueWorker {
-          :Requeue task;
-          :Log event queue_processing_failed;
-        }
-      endif
+      partition QueueWorker {
+        :Log event json_validation_failed;
+        :Build fallback DataFactRecord;
+        :Set status = PROCESSED_FROM_QUEUE_FALLBACK;
+      }
+    endif
+
+    partition SQLite {
+      :Create PendingConfirmation draft;
+    }
+
+    partition QueueWorker {
+      :Send post-factum confirmation card;
+      :Log event post_factum_notification_sent;
+    }
+
+    if (Notification sent?) then (yes)
+      partition SQLite {
+        :Mark queue task done;
+      }
+      note right
+        Google Sheets write does not happen here.
+        The same Confirm callback used in the online flow
+        persists the record later.
+      end note
+      stop
+    else (no)
+      partition SQLite {
+        :Delete PendingConfirmation draft;
+        :Requeue task with backoff + jitter;
+      }
+
+      partition QueueWorker {
+        :Log event queue_processing_failed;
+      }
+      stop
     endif
 
   else (no)
-    partition QueueWorker {
-      :Log event queue_task_invalid;
-    }
+    if (Timeout?) then (yes)
+      partition SQLite {
+        :Requeue task with backoff + jitter;
+      }
+
+      partition QueueWorker {
+        :Log event llm_timeout;
+        :Log event queue_enqueued (requeue_reason=llm_timeout);
+      }
+      stop
+
+    else (error)
+      partition SQLite {
+        :Requeue task with backoff + jitter;
+      }
+
+      partition QueueWorker {
+        :Log event queue_processing_failed;
+      }
+      stop
+    endif
   endif
 
 else (no)
   partition QueueWorker {
-    :No pending task on this poll tick;
+    :No due queue task on this poll tick;
   }
+  stop
 endif
-
-stop
 
 note right
   This activity describes one queue-worker iteration.
-  In runtime this loop repeats forever with sleep
-  between polling ticks.
+  Runtime loops forever with sleep between polling ticks.
 
-  Structured logging contract:
-  docs/logging/logging_spec.md
+  Confirm / Edit / Cancel handling is shared with
+  TelegramPollingHandler and is documented in the online flow.
 end note
 
 @enduml

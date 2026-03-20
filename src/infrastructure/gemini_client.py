@@ -94,9 +94,14 @@ class GeminiClient:
         )
         return {
             "llm_model": self._model,
+            "llm_preflight_enabled": True,
             "llm_preflight_timeout_seconds": effective_timeout_seconds,
             "llm_preflight_response_length": len(response),
         }
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def _extract_text(self, response: object) -> str:
         text = getattr(response, "text", None)

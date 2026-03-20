@@ -48,9 +48,7 @@ class QueueWorker:
                     InlineKeyboardButton(
                         text="Confirm",
                         callback_data=f"confirm:{confirmation_id}",
-                    )
-                ],
-                [
+                    ),
                     InlineKeyboardButton(
                         text="Edit",
                         callback_data=f"edit:{confirmation_id}",

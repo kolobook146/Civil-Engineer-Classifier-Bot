@@ -4,10 +4,12 @@
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  id="Definitions_ConstructionReportBot"
-                  targetNamespace="https://example.local/bpmn/construction-report-bot">
+                  id="Definitions_CivilEngineerClassifierBot"
+                  targetNamespace="https://example.local/bpmn/civil-engineer-classifier-bot">
 
-  <bpmn:process id="Process_ConstructionReportBot" name="Construction Report Telegram Bot (Pilot, polling + queue worker)" isExecutable="false">
+  <bpmn:process id="Process_CivilEngineerClassifierBot"
+                name="Civil Engineer's Classifier Bot (Pilot: polling/webhook + queue + explicit confirmation)"
+                isExecutable="false">
     <bpmn:laneSet id="LaneSet_Main">
       <bpmn:lane id="Lane_User" name="User">
         <bpmn:flowNodeRef>Start_UserOpensChat</bpmn:flowNodeRef>
@@ -15,10 +17,14 @@
         <bpmn:flowNodeRef>User_PressStart</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>User_PressReportProgress</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>User_SendFreeText</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ConfirmationAction</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>User_ConfirmRecord</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>User_EditRecord</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>User_CancelRecord</bpmn:flowNodeRef>
       </bpmn:lane>
 
       <bpmn:lane id="Lane_Telegram" name="Telegram">
-        <bpmn:flowNodeRef>TG_ReceivePollingUpdate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>TG_ReceiveUpdate</bpmn:flowNodeRef>
       </bpmn:lane>
 
       <bpmn:lane id="Lane_Bot" name="Bot Backend (Online Path)">
@@ -28,105 +34,133 @@
         <bpmn:flowNodeRef>Bot_LoadDictionariesOnline</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_BuildPromptOnline</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_CallGeminiOnline</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_OnlineLlmReplied</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_ValidateJsonOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_OnlineLlmOutcome</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_NormalizeValidateOnline</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_OnlineJsonValid</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_MapValidOnline</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_MapFallbackOnline</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_CreateQueueTask</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_EnqueueMessage</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_EnqueueSucceeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_BuildValidRecordOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_BuildFallbackRecordOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendConfirmationRequestOnline</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Bot_SendQueuedNotice</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_SendImmediateConfirmation</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_SendProcessingError</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Bot_SendPostFactumNotification</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendProcessingErrorOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendCorrectedInputInstruction</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendPendingCancelled</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendRecordSaved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Bot_SendProcessingErrorOnSave</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_OnlineQueued</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_OnlineFailed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_RecordCancelled</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_RecordSaved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_SaveFailedDraftKept</bpmn:flowNodeRef>
       </bpmn:lane>
 
-      <bpmn:lane id="Lane_QueueWorker" name="Queue Worker (Deferred Path)">
-        <bpmn:flowNodeRef>Queue_MessageReady</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_PickPendingMessage</bpmn:flowNodeRef>
+      <bpmn:lane id="Lane_Stores" name="SQLite Stores (Queue + Pending Confirmations)">
+        <bpmn:flowNodeRef>Store_EnqueueQueueTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_EnqueueOk</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_CreatePendingConfirmationOnline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_LoadPendingConfirmation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_DeletePendingAfterSave</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_DeletePendingOnEdit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_DeletePendingOnCancel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_CreatePendingConfirmationQueue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_MarkQueueDone</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_DeletePendingOnNotificationFailure</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Store_RequeueTask</bpmn:flowNodeRef>
+      </bpmn:lane>
+
+      <bpmn:lane id="Lane_QueueWorker" name="Queue Worker">
+        <bpmn:flowNodeRef>Start_QueuePollingTick</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_DequeueDueTask</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_QueueTaskFound</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Queue_LoadDictionaries</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Queue_BuildPrompt</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Queue_CallGemini</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_QueueLlmTimeout</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_ValidateJson</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_QueueLlmOutcome</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_NormalizeValidate</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_QueueJsonValid</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MapValid</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MapFallback</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_MarkDone</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_RequeueOnTimeout</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Queue_RequeueOnProcessingError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_BuildValidRecord</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_BuildFallbackRecord</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Queue_SendPostFactumConfirmation</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_PostFactumSent</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_QueueIdle</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_QueueDeferred</bpmn:flowNodeRef>
       </bpmn:lane>
 
       <bpmn:lane id="Lane_Sheets" name="Google Sheets">
-        <bpmn:flowNodeRef>Sheets_WriteOnline</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_OnlineSheetsWriteSucceeded</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Sheets_WriteQueue</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_QueueSheetsWriteSucceeded</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_OnlineQueued</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_OnlineDone</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_OnlineFailed</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_QueueDeferred</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>End_QueuedDone</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sheets_WriteConfirmedRecord</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_SheetsWriteSucceeded</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
 
     <bpmn:startEvent id="Start_UserOpensChat" name="User opens bot chat"/>
     <bpmn:userTask id="User_OpenChat" name="Open chat with bot"/>
-    <bpmn:userTask id="User_PressStart" name="Press /start (first time)"/>
-    <bpmn:serviceTask id="Bot_SendWelcome" name="Send welcome message + button Report Progress"/>
-    <bpmn:userTask id="User_PressReportProgress" name="Press button: Report Progress"/>
-    <bpmn:serviceTask id="Bot_SendInputInstruction" name="Send free-form input instruction"/>
+    <bpmn:userTask id="User_PressStart" name="Press /start"/>
+    <bpmn:serviceTask id="Bot_SendWelcome" name="Send welcome message + main menu"/>
+    <bpmn:userTask id="User_PressReportProgress" name="Press Report Progress"/>
+    <bpmn:serviceTask id="Bot_SendInputInstruction" name="Send input instruction"/>
     <bpmn:userTask id="User_SendFreeText" name="Send free-form progress message"/>
-    <bpmn:serviceTask id="TG_ReceivePollingUpdate" name="Receive Update (Polling)"/>
+    <bpmn:serviceTask id="TG_ReceiveUpdate" name="Receive Telegram update (Polling or Webhook)"/>
 
-    <bpmn:serviceTask id="Bot_PreprocessText" name="Preprocess text: trim + normalize spaces + log message_received"/>
-    <bpmn:serviceTask id="Bot_LoadDictionariesOnline" name="Load dictionaries from text files (units/work types/stages/functions)"/>
-    <bpmn:serviceTask id="Bot_BuildPromptOnline" name="Build Gemini prompt: dictionaries + normalized/raw text"/>
-    <bpmn:serviceTask id="Bot_CallGeminiOnline" name="Call Gemini (timeout 30s) + log llm_response_received/llm_timeout"/>
-    <bpmn:exclusiveGateway id="Gateway_OnlineLlmReplied" name="Gemini call outcome?"/>
+    <bpmn:serviceTask id="Bot_PreprocessText" name="Preprocess text + log message_received"/>
+    <bpmn:serviceTask id="Bot_LoadDictionariesOnline" name="Load dictionaries from text files"/>
+    <bpmn:serviceTask id="Bot_BuildPromptOnline" name="Build Gemini prompt"/>
+    <bpmn:serviceTask id="Bot_CallGeminiOnline" name="Call Gemini (timeout 30s)"/>
+    <bpmn:exclusiveGateway id="Gateway_OnlineLlmOutcome" name="Online Gemini outcome?"/>
+    <bpmn:serviceTask id="Bot_NormalizeValidateOnline" name="Normalize payload + validate schema/dictionaries"/>
+    <bpmn:exclusiveGateway id="Gateway_OnlineJsonValid" name="Online JSON valid?"/>
+    <bpmn:serviceTask id="Bot_BuildValidRecordOnline" name="Build record (status=PROCESSED)"/>
+    <bpmn:serviceTask id="Bot_BuildFallbackRecordOnline" name="Build fallback record (status=PROCESSED_WITH_FALLBACK)"/>
+    <bpmn:serviceTask id="Store_CreatePendingConfirmationOnline" name="Create pending confirmation draft"/>
+    <bpmn:serviceTask id="Bot_SendConfirmationRequestOnline" name="Send confirmation card (Confirm / Edit / Cancel)"/>
 
-    <bpmn:serviceTask id="Bot_ValidateJsonOnline" name="Validate JSON schema + dictionary constraints (including unit)"/>
-    <bpmn:exclusiveGateway id="Gateway_OnlineJsonValid" name="JSON valid?"/>
-    <bpmn:serviceTask id="Bot_MapValidOnline" name="Map valid payload (status=PROCESSED) + log json_validation_passed"/>
-    <bpmn:serviceTask id="Bot_MapFallbackOnline" name="Map fallback payload (status=PROCESSED_WITH_FALLBACK) + log json_validation_failed"/>
-    <bpmn:serviceTask id="Sheets_WriteOnline" name="Write data_facts: raw_text + classification + audit fields"/>
-    <bpmn:exclusiveGateway id="Gateway_OnlineSheetsWriteSucceeded" name="Sheets write succeeded?"/>
-    <bpmn:serviceTask id="Bot_SendImmediateConfirmation" name="Notify user: Recorded data + Status"/>
+    <bpmn:serviceTask id="Store_EnqueueQueueTask" name="Enqueue queue task (raw_text + normalized_text + meta)"/>
+    <bpmn:exclusiveGateway id="Gateway_EnqueueOk" name="Queue enqueue succeeded?"/>
+    <bpmn:serviceTask id="Bot_SendQueuedNotice" name="Notify user: queued for deferred processing"/>
+    <bpmn:serviceTask id="Bot_SendProcessingErrorOnline" name="Notify user: processing failed"/>
 
-    <bpmn:serviceTask id="Bot_CreateQueueTask" name="Create queue task (raw_text + normalized_text + message metadata)"/>
-    <bpmn:serviceTask id="Bot_EnqueueMessage" name="Enqueue message (status=QUEUED) + log queue_enqueued"/>
-    <bpmn:exclusiveGateway id="Gateway_EnqueueSucceeded" name="Enqueue succeeded?"/>
-    <bpmn:serviceTask id="Bot_SendQueuedNotice" name="Notify user: LLM is busy, message queued"/>
-    <bpmn:serviceTask id="Bot_SendProcessingError" name="Notify user: processing failed, please retry"/>
+    <bpmn:exclusiveGateway id="Gateway_ConfirmationAction" name="User confirmation action?"/>
+    <bpmn:userTask id="User_ConfirmRecord" name="Press Confirm"/>
+    <bpmn:userTask id="User_EditRecord" name="Press Edit"/>
+    <bpmn:userTask id="User_CancelRecord" name="Press Cancel"/>
 
-    <bpmn:startEvent id="Queue_MessageReady" name="Queue worker picks pending task (polling tick)">
-      <bpmn:messageEventDefinition id="MessageEvent_QueueReady"/>
+    <bpmn:serviceTask id="Store_LoadPendingConfirmation" name="Load pending confirmation by confirmation_id"/>
+    <bpmn:serviceTask id="Sheets_WriteConfirmedRecord" name="Append confirmed row to data_facts"/>
+    <bpmn:exclusiveGateway id="Gateway_SheetsWriteSucceeded" name="Sheets write succeeded?"/>
+    <bpmn:serviceTask id="Store_DeletePendingAfterSave" name="Delete pending confirmation after successful save"/>
+    <bpmn:serviceTask id="Bot_SendRecordSaved" name="Notify user: Saved + post-save actions"/>
+    <bpmn:serviceTask id="Bot_SendProcessingErrorOnSave" name="Notify user: save failed (draft kept)"/>
+
+    <bpmn:serviceTask id="Store_DeletePendingOnEdit" name="Delete pending confirmation for edit"/>
+    <bpmn:serviceTask id="Bot_SendCorrectedInputInstruction" name="Ask user to send corrected message"/>
+    <bpmn:serviceTask id="Store_DeletePendingOnCancel" name="Delete pending confirmation on cancel"/>
+    <bpmn:serviceTask id="Bot_SendPendingCancelled" name="Notify user: draft cancelled + main menu"/>
+
+    <bpmn:startEvent id="Start_QueuePollingTick" name="Queue worker polling tick">
+      <bpmn:timerEventDefinition id="TimerEvent_QueueTick"/>
     </bpmn:startEvent>
-
-    <bpmn:serviceTask id="Queue_PickPendingMessage" name="Pick oldest pending queue item (recover processing->pending on startup)"/>
-    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue worker: load dictionaries (units/work types/stages/functions)"/>
-    <bpmn:serviceTask id="Queue_BuildPrompt" name="Queue worker: build Gemini prompt"/>
-    <bpmn:serviceTask id="Queue_CallGemini" name="Queue worker: call Gemini"/>
-    <bpmn:exclusiveGateway id="Gateway_QueueLlmTimeout" name="Queue Gemini call outcome?"/>
-    <bpmn:serviceTask id="Queue_RequeueOnTimeout" name="Requeue task (reason=llm_timeout) + log queue_enqueued"/>
-
-    <bpmn:serviceTask id="Queue_ValidateJson" name="Queue worker: validate JSON schema + dictionary constraints (including unit)"/>
+    <bpmn:serviceTask id="Queue_DequeueDueTask" name="Dequeue due queue task"/>
+    <bpmn:exclusiveGateway id="Gateway_QueueTaskFound" name="Due task found?"/>
+    <bpmn:serviceTask id="Queue_LoadDictionaries" name="Queue: load dictionaries"/>
+    <bpmn:serviceTask id="Queue_BuildPrompt" name="Queue: build Gemini prompt"/>
+    <bpmn:serviceTask id="Queue_CallGemini" name="Queue: call Gemini"/>
+    <bpmn:exclusiveGateway id="Gateway_QueueLlmOutcome" name="Queue Gemini outcome?"/>
+    <bpmn:serviceTask id="Queue_NormalizeValidate" name="Queue: normalize payload + validate schema/dictionaries"/>
     <bpmn:exclusiveGateway id="Gateway_QueueJsonValid" name="Queue JSON valid?"/>
-    <bpmn:serviceTask id="Queue_MapValid" name="Map valid payload (status=PROCESSED_FROM_QUEUE)"/>
-    <bpmn:serviceTask id="Queue_MapFallback" name="Map fallback payload (status=PROCESSED_FROM_QUEUE_FALLBACK)"/>
+    <bpmn:serviceTask id="Queue_BuildValidRecord" name="Build record (status=PROCESSED_FROM_QUEUE)"/>
+    <bpmn:serviceTask id="Queue_BuildFallbackRecord" name="Build fallback record (status=PROCESSED_FROM_QUEUE_FALLBACK)"/>
+    <bpmn:serviceTask id="Store_CreatePendingConfirmationQueue" name="Create post-factum pending confirmation draft"/>
+    <bpmn:serviceTask id="Queue_SendPostFactumConfirmation" name="Send post-factum confirmation card"/>
+    <bpmn:exclusiveGateway id="Gateway_PostFactumSent" name="Post-factum confirmation sent?"/>
+    <bpmn:serviceTask id="Store_MarkQueueDone" name="Mark queue task done"/>
+    <bpmn:serviceTask id="Store_DeletePendingOnNotificationFailure" name="Delete pending draft if notification failed"/>
+    <bpmn:serviceTask id="Store_RequeueTask" name="Requeue task with backoff + log queue_processing_failed/queue_enqueued"/>
 
-    <bpmn:serviceTask id="Sheets_WriteQueue" name="Queue worker: write data_facts"/>
-    <bpmn:exclusiveGateway id="Gateway_QueueSheetsWriteSucceeded" name="Queue write succeeded?"/>
-    <bpmn:serviceTask id="Queue_MarkDone" name="Mark queue task done (delete from queue)"/>
-    <bpmn:serviceTask id="Bot_SendPostFactumNotification" name="Send post-factum notification + log post_factum_notification_sent"/>
-    <bpmn:serviceTask id="Queue_RequeueOnProcessingError" name="Requeue task + log queue_processing_failed"/>
-
-    <bpmn:endEvent id="End_OnlineQueued" name="Done (queued for deferred processing)"/>
-    <bpmn:endEvent id="End_OnlineDone" name="Done (online)"/>
+    <bpmn:endEvent id="End_OnlineQueued" name="Done (queued)"/>
     <bpmn:endEvent id="End_OnlineFailed" name="Done (online error)"/>
+    <bpmn:endEvent id="End_RecordCancelled" name="Done (draft cancelled)"/>
+    <bpmn:endEvent id="End_RecordSaved" name="Done (saved to Sheets)"/>
+    <bpmn:endEvent id="End_SaveFailedDraftKept" name="Done (save failed, draft kept)"/>
+    <bpmn:endEvent id="End_QueueIdle" name="Done (no due task)"/>
     <bpmn:endEvent id="End_QueueDeferred" name="Done (requeued for later retry)"/>
-    <bpmn:endEvent id="End_QueuedDone" name="Done (processed from queue)"/>
 
     <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_UserOpensChat" targetRef="User_OpenChat"/>
     <bpmn:sequenceFlow id="Flow_02" sourceRef="User_OpenChat" targetRef="User_PressStart"/>
@@ -134,297 +168,600 @@
     <bpmn:sequenceFlow id="Flow_04" sourceRef="Bot_SendWelcome" targetRef="User_PressReportProgress"/>
     <bpmn:sequenceFlow id="Flow_05" sourceRef="User_PressReportProgress" targetRef="Bot_SendInputInstruction"/>
     <bpmn:sequenceFlow id="Flow_06" sourceRef="Bot_SendInputInstruction" targetRef="User_SendFreeText"/>
-    <bpmn:sequenceFlow id="Flow_07" sourceRef="User_SendFreeText" targetRef="TG_ReceivePollingUpdate"/>
-    <bpmn:sequenceFlow id="Flow_08" sourceRef="TG_ReceivePollingUpdate" targetRef="Bot_PreprocessText"/>
-
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="User_SendFreeText" targetRef="TG_ReceiveUpdate"/>
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="TG_ReceiveUpdate" targetRef="Bot_PreprocessText"/>
     <bpmn:sequenceFlow id="Flow_09" sourceRef="Bot_PreprocessText" targetRef="Bot_LoadDictionariesOnline"/>
     <bpmn:sequenceFlow id="Flow_10" sourceRef="Bot_LoadDictionariesOnline" targetRef="Bot_BuildPromptOnline"/>
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Bot_BuildPromptOnline" targetRef="Bot_CallGeminiOnline"/>
-    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bot_CallGeminiOnline" targetRef="Gateway_OnlineLlmReplied"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bot_CallGeminiOnline" targetRef="Gateway_OnlineLlmOutcome"/>
+    <bpmn:sequenceFlow id="Flow_13_success" sourceRef="Gateway_OnlineLlmOutcome" targetRef="Bot_NormalizeValidateOnline" name="Success"/>
+    <bpmn:sequenceFlow id="Flow_13_timeout" sourceRef="Gateway_OnlineLlmOutcome" targetRef="Store_EnqueueQueueTask" name="Timeout"/>
+    <bpmn:sequenceFlow id="Flow_13_error" sourceRef="Gateway_OnlineLlmOutcome" targetRef="Bot_SendProcessingErrorOnline" name="Error"/>
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="Bot_NormalizeValidateOnline" targetRef="Gateway_OnlineJsonValid"/>
+    <bpmn:sequenceFlow id="Flow_15_yes" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_BuildValidRecordOnline" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_15_no" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_BuildFallbackRecordOnline" name="No"/>
+    <bpmn:sequenceFlow id="Flow_16a" sourceRef="Bot_BuildValidRecordOnline" targetRef="Store_CreatePendingConfirmationOnline"/>
+    <bpmn:sequenceFlow id="Flow_16b" sourceRef="Bot_BuildFallbackRecordOnline" targetRef="Store_CreatePendingConfirmationOnline"/>
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="Store_CreatePendingConfirmationOnline" targetRef="Bot_SendConfirmationRequestOnline"/>
+    <bpmn:sequenceFlow id="Flow_18" sourceRef="Bot_SendConfirmationRequestOnline" targetRef="Gateway_ConfirmationAction"/>
 
-    <bpmn:sequenceFlow id="Flow_13_yes" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_ValidateJsonOnline" name="Success"/>
-    <bpmn:sequenceFlow id="Flow_13_no" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_CreateQueueTask" name="Timeout"/>
-    <bpmn:sequenceFlow id="Flow_13_error" sourceRef="Gateway_OnlineLlmReplied" targetRef="Bot_SendProcessingError" name="Error"/>
+    <bpmn:sequenceFlow id="Flow_19_confirm" sourceRef="Gateway_ConfirmationAction" targetRef="User_ConfirmRecord" name="Confirm"/>
+    <bpmn:sequenceFlow id="Flow_19_edit" sourceRef="Gateway_ConfirmationAction" targetRef="User_EditRecord" name="Edit"/>
+    <bpmn:sequenceFlow id="Flow_19_cancel" sourceRef="Gateway_ConfirmationAction" targetRef="User_CancelRecord" name="Cancel"/>
 
-    <bpmn:sequenceFlow id="Flow_14" sourceRef="Bot_ValidateJsonOnline" targetRef="Gateway_OnlineJsonValid"/>
-    <bpmn:sequenceFlow id="Flow_15_yes" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_MapValidOnline" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_15_no" sourceRef="Gateway_OnlineJsonValid" targetRef="Bot_MapFallbackOnline" name="No"/>
-    <bpmn:sequenceFlow id="Flow_16a" sourceRef="Bot_MapValidOnline" targetRef="Sheets_WriteOnline"/>
-    <bpmn:sequenceFlow id="Flow_16b" sourceRef="Bot_MapFallbackOnline" targetRef="Sheets_WriteOnline"/>
-    <bpmn:sequenceFlow id="Flow_17" sourceRef="Sheets_WriteOnline" targetRef="Gateway_OnlineSheetsWriteSucceeded"/>
-    <bpmn:sequenceFlow id="Flow_18_yes" sourceRef="Gateway_OnlineSheetsWriteSucceeded" targetRef="Bot_SendImmediateConfirmation" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_18_no" sourceRef="Gateway_OnlineSheetsWriteSucceeded" targetRef="Bot_SendProcessingError" name="No"/>
-    <bpmn:sequenceFlow id="Flow_19" sourceRef="Bot_SendImmediateConfirmation" targetRef="End_OnlineDone"/>
+    <bpmn:sequenceFlow id="Flow_20" sourceRef="User_ConfirmRecord" targetRef="Store_LoadPendingConfirmation"/>
+    <bpmn:sequenceFlow id="Flow_21" sourceRef="Store_LoadPendingConfirmation" targetRef="Sheets_WriteConfirmedRecord"/>
+    <bpmn:sequenceFlow id="Flow_22" sourceRef="Sheets_WriteConfirmedRecord" targetRef="Gateway_SheetsWriteSucceeded"/>
+    <bpmn:sequenceFlow id="Flow_23_yes" sourceRef="Gateway_SheetsWriteSucceeded" targetRef="Store_DeletePendingAfterSave" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_23_no" sourceRef="Gateway_SheetsWriteSucceeded" targetRef="Bot_SendProcessingErrorOnSave" name="No"/>
+    <bpmn:sequenceFlow id="Flow_24" sourceRef="Store_DeletePendingAfterSave" targetRef="Bot_SendRecordSaved"/>
+    <bpmn:sequenceFlow id="Flow_25" sourceRef="Bot_SendRecordSaved" targetRef="End_RecordSaved"/>
+    <bpmn:sequenceFlow id="Flow_26" sourceRef="Bot_SendProcessingErrorOnSave" targetRef="End_SaveFailedDraftKept"/>
 
-    <bpmn:sequenceFlow id="Flow_20" sourceRef="Bot_CreateQueueTask" targetRef="Bot_EnqueueMessage"/>
-    <bpmn:sequenceFlow id="Flow_21" sourceRef="Bot_EnqueueMessage" targetRef="Gateway_EnqueueSucceeded"/>
-    <bpmn:sequenceFlow id="Flow_22_yes" sourceRef="Gateway_EnqueueSucceeded" targetRef="Bot_SendQueuedNotice" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_22_no" sourceRef="Gateway_EnqueueSucceeded" targetRef="Bot_SendProcessingError" name="No"/>
-    <bpmn:sequenceFlow id="Flow_23" sourceRef="Bot_SendQueuedNotice" targetRef="End_OnlineQueued"/>
+    <bpmn:sequenceFlow id="Flow_27" sourceRef="User_EditRecord" targetRef="Store_DeletePendingOnEdit"/>
+    <bpmn:sequenceFlow id="Flow_28" sourceRef="Store_DeletePendingOnEdit" targetRef="Bot_SendCorrectedInputInstruction"/>
+    <bpmn:sequenceFlow id="Flow_29" sourceRef="Bot_SendCorrectedInputInstruction" targetRef="User_SendFreeText"/>
 
-    <bpmn:sequenceFlow id="Flow_24" sourceRef="Queue_MessageReady" targetRef="Queue_PickPendingMessage"/>
-    <bpmn:sequenceFlow id="Flow_25" sourceRef="Queue_PickPendingMessage" targetRef="Queue_LoadDictionaries"/>
-    <bpmn:sequenceFlow id="Flow_26" sourceRef="Queue_LoadDictionaries" targetRef="Queue_BuildPrompt"/>
-    <bpmn:sequenceFlow id="Flow_27" sourceRef="Queue_BuildPrompt" targetRef="Queue_CallGemini"/>
-    <bpmn:sequenceFlow id="Flow_28" sourceRef="Queue_CallGemini" targetRef="Gateway_QueueLlmTimeout"/>
+    <bpmn:sequenceFlow id="Flow_30" sourceRef="User_CancelRecord" targetRef="Store_DeletePendingOnCancel"/>
+    <bpmn:sequenceFlow id="Flow_31" sourceRef="Store_DeletePendingOnCancel" targetRef="Bot_SendPendingCancelled"/>
+    <bpmn:sequenceFlow id="Flow_32" sourceRef="Bot_SendPendingCancelled" targetRef="End_RecordCancelled"/>
 
-    <bpmn:sequenceFlow id="Flow_29_yes" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_RequeueOnTimeout" name="Timeout"/>
-    <bpmn:sequenceFlow id="Flow_29_no" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_ValidateJson" name="Success"/>
-    <bpmn:sequenceFlow id="Flow_29_error" sourceRef="Gateway_QueueLlmTimeout" targetRef="Queue_RequeueOnProcessingError" name="Error"/>
-    <bpmn:sequenceFlow id="Flow_30" sourceRef="Queue_RequeueOnTimeout" targetRef="End_QueueDeferred"/>
+    <bpmn:sequenceFlow id="Flow_33" sourceRef="Store_EnqueueQueueTask" targetRef="Gateway_EnqueueOk"/>
+    <bpmn:sequenceFlow id="Flow_34_yes" sourceRef="Gateway_EnqueueOk" targetRef="Bot_SendQueuedNotice" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_34_no" sourceRef="Gateway_EnqueueOk" targetRef="Bot_SendProcessingErrorOnline" name="No"/>
+    <bpmn:sequenceFlow id="Flow_35" sourceRef="Bot_SendQueuedNotice" targetRef="End_OnlineQueued"/>
+    <bpmn:sequenceFlow id="Flow_36" sourceRef="Bot_SendProcessingErrorOnline" targetRef="End_OnlineFailed"/>
 
-    <bpmn:sequenceFlow id="Flow_31" sourceRef="Queue_ValidateJson" targetRef="Gateway_QueueJsonValid"/>
-    <bpmn:sequenceFlow id="Flow_32_yes" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_MapValid" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_32_no" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_MapFallback" name="No"/>
-    <bpmn:sequenceFlow id="Flow_33a" sourceRef="Queue_MapValid" targetRef="Sheets_WriteQueue"/>
-    <bpmn:sequenceFlow id="Flow_33b" sourceRef="Queue_MapFallback" targetRef="Sheets_WriteQueue"/>
+    <bpmn:sequenceFlow id="Flow_40" sourceRef="Start_QueuePollingTick" targetRef="Queue_DequeueDueTask"/>
+    <bpmn:sequenceFlow id="Flow_41" sourceRef="Queue_DequeueDueTask" targetRef="Gateway_QueueTaskFound"/>
+    <bpmn:sequenceFlow id="Flow_42_no" sourceRef="Gateway_QueueTaskFound" targetRef="End_QueueIdle" name="No"/>
+    <bpmn:sequenceFlow id="Flow_42_yes" sourceRef="Gateway_QueueTaskFound" targetRef="Queue_LoadDictionaries" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_43" sourceRef="Queue_LoadDictionaries" targetRef="Queue_BuildPrompt"/>
+    <bpmn:sequenceFlow id="Flow_44" sourceRef="Queue_BuildPrompt" targetRef="Queue_CallGemini"/>
+    <bpmn:sequenceFlow id="Flow_45" sourceRef="Queue_CallGemini" targetRef="Gateway_QueueLlmOutcome"/>
+    <bpmn:sequenceFlow id="Flow_46_success" sourceRef="Gateway_QueueLlmOutcome" targetRef="Queue_NormalizeValidate" name="Success"/>
+    <bpmn:sequenceFlow id="Flow_46_timeout" sourceRef="Gateway_QueueLlmOutcome" targetRef="Store_RequeueTask" name="Timeout"/>
+    <bpmn:sequenceFlow id="Flow_46_error" sourceRef="Gateway_QueueLlmOutcome" targetRef="Store_RequeueTask" name="Error"/>
+    <bpmn:sequenceFlow id="Flow_47" sourceRef="Queue_NormalizeValidate" targetRef="Gateway_QueueJsonValid"/>
+    <bpmn:sequenceFlow id="Flow_48_yes" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_BuildValidRecord" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_48_no" sourceRef="Gateway_QueueJsonValid" targetRef="Queue_BuildFallbackRecord" name="No"/>
+    <bpmn:sequenceFlow id="Flow_49a" sourceRef="Queue_BuildValidRecord" targetRef="Store_CreatePendingConfirmationQueue"/>
+    <bpmn:sequenceFlow id="Flow_49b" sourceRef="Queue_BuildFallbackRecord" targetRef="Store_CreatePendingConfirmationQueue"/>
+    <bpmn:sequenceFlow id="Flow_50" sourceRef="Store_CreatePendingConfirmationQueue" targetRef="Queue_SendPostFactumConfirmation"/>
+    <bpmn:sequenceFlow id="Flow_51" sourceRef="Queue_SendPostFactumConfirmation" targetRef="Gateway_PostFactumSent"/>
+    <bpmn:sequenceFlow id="Flow_52_yes" sourceRef="Gateway_PostFactumSent" targetRef="Store_MarkQueueDone" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_52_no" sourceRef="Gateway_PostFactumSent" targetRef="Store_DeletePendingOnNotificationFailure" name="No"/>
+    <bpmn:sequenceFlow id="Flow_53" sourceRef="Store_DeletePendingOnNotificationFailure" targetRef="Store_RequeueTask"/>
+    <bpmn:sequenceFlow id="Flow_54" sourceRef="Store_RequeueTask" targetRef="End_QueueDeferred"/>
+    <bpmn:sequenceFlow id="Flow_55" sourceRef="Store_MarkQueueDone" targetRef="Gateway_ConfirmationAction"/>
 
-    <bpmn:sequenceFlow id="Flow_34" sourceRef="Sheets_WriteQueue" targetRef="Gateway_QueueSheetsWriteSucceeded"/>
-    <bpmn:sequenceFlow id="Flow_35_yes" sourceRef="Gateway_QueueSheetsWriteSucceeded" targetRef="Queue_MarkDone" name="Yes"/>
-    <bpmn:sequenceFlow id="Flow_35_no" sourceRef="Gateway_QueueSheetsWriteSucceeded" targetRef="Queue_RequeueOnProcessingError" name="No"/>
-    <bpmn:sequenceFlow id="Flow_36" sourceRef="Queue_MarkDone" targetRef="Bot_SendPostFactumNotification"/>
-    <bpmn:sequenceFlow id="Flow_37" sourceRef="Bot_SendPostFactumNotification" targetRef="End_QueuedDone"/>
-    <bpmn:sequenceFlow id="Flow_38" sourceRef="Queue_RequeueOnProcessingError" targetRef="End_QueueDeferred"/>
-
-    <bpmn:sequenceFlow id="Flow_39" sourceRef="Bot_SendProcessingError" targetRef="End_OnlineFailed"/>
-
-    <bpmn:textAnnotation id="TextAnnotation_LoggingAndNotes">
-      <bpmn:text>Structured logging events reflected in this BPMN: polling_started, queue_worker_bootstrap_started, queue_worker_started, message_received, llm_response_received, llm_timeout, json_validation_passed/failed, queue_enqueued, queue_enqueue_failed, queue_dequeued, queue_task_invalid, queue_processing_failed, sheets_write_success/failed, post_factum_notification_sent, classification_failed, telegram_update_error. Online path ends immediately after queued notice; deferred processing and post-factum notification are executed by a separate polling queue worker process. Pilot queue mode intentionally runs without retry policy schedule/DLQ.</bpmn:text>
+    <bpmn:textAnnotation id="TextAnnotation_RuntimeAndUXNotes">
+      <bpmn:text>Runtime notes: online ingress can run through main_polling.py or main_webhook.py; both entrypoints execute startup_preflight and use the same TelegramPollingHandler. Auxiliary lightweight UI branches (Help, Show Example, input cancel, Main Menu, Report Another) are intentionally omitted from the primary BPMN path for readability.</bpmn:text>
     </bpmn:textAnnotation>
-    <bpmn:association id="Association_LoggingAndNotes" sourceRef="End_QueuedDone" targetRef="TextAnnotation_LoggingAndNotes"/>
+    <bpmn:textAnnotation id="TextAnnotation_ProcessingNotes">
+      <bpmn:text>Processing notes: raw_text is always preserved inside the pending confirmation record and later in data_facts. Online and deferred paths both classify -> normalize -> validate -> map valid/fallback -> create a pending confirmation. Google Sheets write happens only after explicit user confirmation. If save fails on Confirm, the pending draft is intentionally kept so the user can retry. Queue requeue persists attempt_count and next_attempt_at with bounded backoff and jitter.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="TextAnnotation_LoggingNotes">
+      <bpmn:text>Structured logging reflected in this BPMN: startup_preflight_started/passed/failed, polling_started, webhook_started, queue_worker_bootstrap_started, queue_worker_started, message_received, llm_response_received, llm_timeout, json_validation_passed/failed, queue_enqueued, queue_enqueue_failed, queue_dequeued, queue_processing_failed, sheets_write_success/failed, post_factum_notification_sent, classification_failed, telegram_update_error.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_RuntimeAndUXNotes" sourceRef="Bot_SendWelcome" targetRef="TextAnnotation_RuntimeAndUXNotes"/>
+    <bpmn:association id="Association_ProcessingNotes" sourceRef="Sheets_WriteConfirmedRecord" targetRef="TextAnnotation_ProcessingNotes"/>
+    <bpmn:association id="Association_LoggingNotes" sourceRef="Store_RequeueTask" targetRef="TextAnnotation_LoggingNotes"/>
   </bpmn:process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_ConstructionReportBot">
-    <bpmndi:BPMNPlane id="BPMNPlane_ConstructionReportBot" bpmnElement="Process_ConstructionReportBot">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_CivilEngineerClassifierBot">
+    <bpmndi:BPMNPlane id="BPMNPlane_CivilEngineerClassifierBot" bpmnElement="Process_CivilEngineerClassifierBot">
       <bpmndi:BPMNShape id="Shape_Lane_User" bpmnElement="Lane_User" isHorizontal="true">
-        <dc:Bounds x="120" y="100" width="5560" height="120"/>
+        <dc:Bounds x="120" y="100" width="5600" height="160"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Telegram" bpmnElement="Lane_Telegram" isHorizontal="true">
-        <dc:Bounds x="120" y="220" width="5560" height="90"/>
+        <dc:Bounds x="120" y="260" width="5600" height="100"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Bot" bpmnElement="Lane_Bot" isHorizontal="true">
-        <dc:Bounds x="120" y="310" width="5560" height="240"/>
+        <dc:Bounds x="120" y="360" width="5600" height="230"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Stores" bpmnElement="Lane_Stores" isHorizontal="true">
+        <dc:Bounds x="120" y="590" width="5600" height="170"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_QueueWorker" bpmnElement="Lane_QueueWorker" isHorizontal="true">
-        <dc:Bounds x="120" y="550" width="5560" height="220"/>
+        <dc:Bounds x="120" y="760" width="5600" height="220"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Sheets" bpmnElement="Lane_Sheets" isHorizontal="true">
-        <dc:Bounds x="120" y="770" width="5560" height="180"/>
+        <dc:Bounds x="120" y="980" width="5600" height="120"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="Shape_Start_UserOpensChat" bpmnElement="Start_UserOpensChat">
-        <dc:Bounds x="160" y="142" width="36" height="36"/>
+        <dc:Bounds x="160" y="162" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_OpenChat" bpmnElement="User_OpenChat">
-        <dc:Bounds x="220" y="120" width="120" height="80"/>
+        <dc:Bounds x="220" y="140" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_PressStart" bpmnElement="User_PressStart">
-        <dc:Bounds x="380" y="120" width="120" height="80"/>
+        <dc:Bounds x="380" y="140" width="120" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_SendWelcome" bpmnElement="Bot_SendWelcome">
-        <dc:Bounds x="540" y="390" width="120" height="80"/>
+        <dc:Bounds x="540" y="435" width="130" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_PressReportProgress" bpmnElement="User_PressReportProgress">
-        <dc:Bounds x="700" y="120" width="120" height="80"/>
+        <dc:Bounds x="710" y="140" width="130" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_SendInputInstruction" bpmnElement="Bot_SendInputInstruction">
-        <dc:Bounds x="860" y="390" width="120" height="80"/>
+        <dc:Bounds x="880" y="435" width="130" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_User_SendFreeText" bpmnElement="User_SendFreeText">
-        <dc:Bounds x="1020" y="120" width="120" height="80"/>
+        <dc:Bounds x="1050" y="140" width="130" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_TG_ReceivePollingUpdate" bpmnElement="TG_ReceivePollingUpdate">
-        <dc:Bounds x="1180" y="225" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_TG_ReceiveUpdate" bpmnElement="TG_ReceiveUpdate">
+        <dc:Bounds x="1220" y="270" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="Shape_Bot_PreprocessText" bpmnElement="Bot_PreprocessText">
-        <dc:Bounds x="1340" y="390" width="120" height="80"/>
+        <dc:Bounds x="1400" y="435" width="140" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_LoadDictionariesOnline" bpmnElement="Bot_LoadDictionariesOnline">
-        <dc:Bounds x="1500" y="390" width="120" height="80"/>
+        <dc:Bounds x="1580" y="435" width="140" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_BuildPromptOnline" bpmnElement="Bot_BuildPromptOnline">
-        <dc:Bounds x="1660" y="390" width="120" height="80"/>
+        <dc:Bounds x="1760" y="435" width="140" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_CallGeminiOnline" bpmnElement="Bot_CallGeminiOnline">
-        <dc:Bounds x="1820" y="390" width="120" height="80"/>
+        <dc:Bounds x="1940" y="435" width="140" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_OnlineLlmReplied" bpmnElement="Gateway_OnlineLlmReplied" isMarkerVisible="true">
-        <dc:Bounds x="1980" y="405" width="50" height="50"/>
+      <bpmndi:BPMNShape id="Shape_Gateway_OnlineLlmOutcome" bpmnElement="Gateway_OnlineLlmOutcome" isMarkerVisible="true">
+        <dc:Bounds x="2120" y="450" width="50" height="50"/>
       </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Shape_Bot_ValidateJsonOnline" bpmnElement="Bot_ValidateJsonOnline">
-        <dc:Bounds x="2100" y="390" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Bot_NormalizeValidateOnline" bpmnElement="Bot_NormalizeValidateOnline">
+        <dc:Bounds x="2240" y="435" width="160" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_OnlineJsonValid" bpmnElement="Gateway_OnlineJsonValid" isMarkerVisible="true">
-        <dc:Bounds x="2260" y="405" width="50" height="50"/>
+        <dc:Bounds x="2430" y="450" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_MapValidOnline" bpmnElement="Bot_MapValidOnline">
-        <dc:Bounds x="2380" y="360" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Bot_BuildValidRecordOnline" bpmnElement="Bot_BuildValidRecordOnline">
+        <dc:Bounds x="2520" y="390" width="160" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_MapFallbackOnline" bpmnElement="Bot_MapFallbackOnline">
-        <dc:Bounds x="2380" y="470" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Bot_BuildFallbackRecordOnline" bpmnElement="Bot_BuildFallbackRecordOnline">
+        <dc:Bounds x="2520" y="500" width="160" height="80"/>
       </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Shape_Sheets_WriteOnline" bpmnElement="Sheets_WriteOnline">
-        <dc:Bounds x="2560" y="820" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Store_CreatePendingConfirmationOnline" bpmnElement="Store_CreatePendingConfirmationOnline">
+        <dc:Bounds x="2720" y="635" width="170" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_OnlineSheetsWriteSucceeded" bpmnElement="Gateway_OnlineSheetsWriteSucceeded" isMarkerVisible="true">
-        <dc:Bounds x="2740" y="835" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendImmediateConfirmation" bpmnElement="Bot_SendImmediateConfirmation">
-        <dc:Bounds x="2860" y="390" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Bot_SendConfirmationRequestOnline" bpmnElement="Bot_SendConfirmationRequestOnline">
+        <dc:Bounds x="2930" y="435" width="170" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="Shape_Bot_CreateQueueTask" bpmnElement="Bot_CreateQueueTask">
-        <dc:Bounds x="2100" y="470" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Store_EnqueueQueueTask" bpmnElement="Store_EnqueueQueueTask">
+        <dc:Bounds x="2240" y="635" width="170" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_EnqueueMessage" bpmnElement="Bot_EnqueueMessage">
-        <dc:Bounds x="2260" y="470" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_EnqueueSucceeded" bpmnElement="Gateway_EnqueueSucceeded" isMarkerVisible="true">
-        <dc:Bounds x="2420" y="485" width="50" height="50"/>
+      <bpmndi:BPMNShape id="Shape_Gateway_EnqueueOk" bpmnElement="Gateway_EnqueueOk" isMarkerVisible="true">
+        <dc:Bounds x="2440" y="650" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Bot_SendQueuedNotice" bpmnElement="Bot_SendQueuedNotice">
-        <dc:Bounds x="2540" y="470" width="120" height="80"/>
+        <dc:Bounds x="2520" y="625" width="160" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendProcessingError" bpmnElement="Bot_SendProcessingError">
-        <dc:Bounds x="2860" y="500" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Bot_SendProcessingErrorOnline" bpmnElement="Bot_SendProcessingErrorOnline">
+        <dc:Bounds x="2720" y="500" width="160" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="Shape_Queue_MessageReady" bpmnElement="Queue_MessageReady">
-        <dc:Bounds x="2700" y="642" width="36" height="36"/>
+      <bpmndi:BPMNShape id="Shape_Gateway_ConfirmationAction" bpmnElement="Gateway_ConfirmationAction" isMarkerVisible="true">
+        <dc:Bounds x="3170" y="155" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_PickPendingMessage" bpmnElement="Queue_PickPendingMessage">
-        <dc:Bounds x="2800" y="620" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_User_ConfirmRecord" bpmnElement="User_ConfirmRecord">
+        <dc:Bounds x="3270" y="100" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_User_EditRecord" bpmnElement="User_EditRecord">
+        <dc:Bounds x="3270" y="185" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_User_CancelRecord" bpmnElement="User_CancelRecord">
+        <dc:Bounds x="3270" y="270" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Store_LoadPendingConfirmation" bpmnElement="Store_LoadPendingConfirmation">
+        <dc:Bounds x="3460" y="635" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Sheets_WriteConfirmedRecord" bpmnElement="Sheets_WriteConfirmedRecord">
+        <dc:Bounds x="3670" y="1000" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_SheetsWriteSucceeded" bpmnElement="Gateway_SheetsWriteSucceeded" isMarkerVisible="true">
+        <dc:Bounds x="3880" y="1015" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Store_DeletePendingAfterSave" bpmnElement="Store_DeletePendingAfterSave">
+        <dc:Bounds x="3970" y="635" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendRecordSaved" bpmnElement="Bot_SendRecordSaved">
+        <dc:Bounds x="4180" y="435" width="160" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendProcessingErrorOnSave" bpmnElement="Bot_SendProcessingErrorOnSave">
+        <dc:Bounds x="4180" y="530" width="160" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Store_DeletePendingOnEdit" bpmnElement="Store_DeletePendingOnEdit">
+        <dc:Bounds x="3460" y="720" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendCorrectedInputInstruction" bpmnElement="Bot_SendCorrectedInputInstruction">
+        <dc:Bounds x="3670" y="435" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Store_DeletePendingOnCancel" bpmnElement="Store_DeletePendingOnCancel">
+        <dc:Bounds x="3460" y="805" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Bot_SendPendingCancelled" bpmnElement="Bot_SendPendingCancelled">
+        <dc:Bounds x="3670" y="530" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Shape_Start_QueuePollingTick" bpmnElement="Start_QueuePollingTick">
+        <dc:Bounds x="160" y="852" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Queue_DequeueDueTask" bpmnElement="Queue_DequeueDueTask">
+        <dc:Bounds x="220" y="830" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_QueueTaskFound" bpmnElement="Gateway_QueueTaskFound" isMarkerVisible="true">
+        <dc:Bounds x="410" y="845" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Queue_LoadDictionaries" bpmnElement="Queue_LoadDictionaries">
-        <dc:Bounds x="2960" y="620" width="120" height="80"/>
+        <dc:Bounds x="520" y="830" width="150" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Queue_BuildPrompt" bpmnElement="Queue_BuildPrompt">
-        <dc:Bounds x="3120" y="620" width="120" height="80"/>
+        <dc:Bounds x="710" y="830" width="150" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Queue_CallGemini" bpmnElement="Queue_CallGemini">
-        <dc:Bounds x="3280" y="620" width="120" height="80"/>
+        <dc:Bounds x="900" y="830" width="150" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_QueueLlmTimeout" bpmnElement="Gateway_QueueLlmTimeout" isMarkerVisible="true">
-        <dc:Bounds x="3440" y="635" width="50" height="50"/>
+      <bpmndi:BPMNShape id="Shape_Gateway_QueueLlmOutcome" bpmnElement="Gateway_QueueLlmOutcome" isMarkerVisible="true">
+        <dc:Bounds x="1090" y="845" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_RequeueOnTimeout" bpmnElement="Queue_RequeueOnTimeout">
-        <dc:Bounds x="3560" y="730" width="120" height="80"/>
-      </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Shape_Queue_ValidateJson" bpmnElement="Queue_ValidateJson">
-        <dc:Bounds x="3560" y="620" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Queue_NormalizeValidate" bpmnElement="Queue_NormalizeValidate">
+        <dc:Bounds x="1200" y="830" width="170" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_QueueJsonValid" bpmnElement="Gateway_QueueJsonValid" isMarkerVisible="true">
-        <dc:Bounds x="3720" y="635" width="50" height="50"/>
+        <dc:Bounds x="1410" y="845" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MapValid" bpmnElement="Queue_MapValid">
-        <dc:Bounds x="3840" y="600" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Queue_BuildValidRecord" bpmnElement="Queue_BuildValidRecord">
+        <dc:Bounds x="1510" y="800" width="170" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MapFallback" bpmnElement="Queue_MapFallback">
-        <dc:Bounds x="3840" y="710" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Queue_BuildFallbackRecord" bpmnElement="Queue_BuildFallbackRecord">
+        <dc:Bounds x="1510" y="900" width="170" height="80"/>
       </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Shape_Sheets_WriteQueue" bpmnElement="Sheets_WriteQueue">
-        <dc:Bounds x="4020" y="820" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Store_CreatePendingConfirmationQueue" bpmnElement="Store_CreatePendingConfirmationQueue">
+        <dc:Bounds x="1720" y="635" width="180" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_QueueSheetsWriteSucceeded" bpmnElement="Gateway_QueueSheetsWriteSucceeded" isMarkerVisible="true">
-        <dc:Bounds x="4200" y="835" width="50" height="50"/>
+      <bpmndi:BPMNShape id="Shape_Queue_SendPostFactumConfirmation" bpmnElement="Queue_SendPostFactumConfirmation">
+        <dc:Bounds x="1940" y="830" width="170" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_MarkDone" bpmnElement="Queue_MarkDone">
-        <dc:Bounds x="4320" y="620" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Gateway_PostFactumSent" bpmnElement="Gateway_PostFactumSent" isMarkerVisible="true">
+        <dc:Bounds x="2150" y="845" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Bot_SendPostFactumNotification" bpmnElement="Bot_SendPostFactumNotification">
-        <dc:Bounds x="4480" y="390" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Store_MarkQueueDone" bpmnElement="Store_MarkQueueDone">
+        <dc:Bounds x="2240" y="635" width="160" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Queue_RequeueOnProcessingError" bpmnElement="Queue_RequeueOnProcessingError">
-        <dc:Bounds x="4320" y="730" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Shape_Store_DeletePendingOnNotificationFailure" bpmnElement="Store_DeletePendingOnNotificationFailure">
+        <dc:Bounds x="2240" y="720" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Store_RequeueTask" bpmnElement="Store_RequeueTask">
+        <dc:Bounds x="2450" y="720" width="180" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="Shape_End_OnlineQueued" bpmnElement="End_OnlineQueued">
-        <dc:Bounds x="3020" y="792" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End_OnlineDone" bpmnElement="End_OnlineDone">
-        <dc:Bounds x="3020" y="842" width="36" height="36"/>
+        <dc:Bounds x="2720" y="660" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_End_OnlineFailed" bpmnElement="End_OnlineFailed">
-        <dc:Bounds x="3020" y="892" width="36" height="36"/>
+        <dc:Bounds x="2920" y="522" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_RecordCancelled" bpmnElement="End_RecordCancelled">
+        <dc:Bounds x="3880" y="552" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_RecordSaved" bpmnElement="End_RecordSaved">
+        <dc:Bounds x="4380" y="457" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_SaveFailedDraftKept" bpmnElement="End_SaveFailedDraftKept">
+        <dc:Bounds x="4380" y="567" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_QueueIdle" bpmnElement="End_QueueIdle">
+        <dc:Bounds x="520" y="942" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_End_QueueDeferred" bpmnElement="End_QueueDeferred">
-        <dc:Bounds x="4480" y="852" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End_QueuedDone" bpmnElement="End_QueuedDone">
-        <dc:Bounds x="4660" y="842" width="36" height="36"/>
+        <dc:Bounds x="2680" y="742" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="Shape_TextAnnotation_LoggingAndNotes" bpmnElement="TextAnnotation_LoggingAndNotes">
-        <dc:Bounds x="4780" y="730" width="900" height="160"/>
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_RuntimeAndUXNotes" bpmnElement="TextAnnotation_RuntimeAndUXNotes">
+        <dc:Bounds x="4520" y="120" width="1120" height="160"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_ProcessingNotes" bpmnElement="TextAnnotation_ProcessingNotes">
+        <dc:Bounds x="4520" y="420" width="1120" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_LoggingNotes" bpmnElement="TextAnnotation_LoggingNotes">
+        <dc:Bounds x="4520" y="760" width="1120" height="190"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="Edge_Flow_01" bpmnElement="Flow_01"><di:waypoint x="196" y="160"/><di:waypoint x="220" y="160"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_02" bpmnElement="Flow_02"><di:waypoint x="340" y="160"/><di:waypoint x="380" y="160"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_03" bpmnElement="Flow_03"><di:waypoint x="500" y="160"/><di:waypoint x="520" y="160"/><di:waypoint x="520" y="430"/><di:waypoint x="540" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_04" bpmnElement="Flow_04"><di:waypoint x="660" y="430"/><di:waypoint x="680" y="430"/><di:waypoint x="680" y="160"/><di:waypoint x="700" y="160"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_05" bpmnElement="Flow_05"><di:waypoint x="820" y="160"/><di:waypoint x="840" y="160"/><di:waypoint x="840" y="430"/><di:waypoint x="860" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_06" bpmnElement="Flow_06"><di:waypoint x="980" y="430"/><di:waypoint x="1000" y="430"/><di:waypoint x="1000" y="160"/><di:waypoint x="1020" y="160"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_07" bpmnElement="Flow_07"><di:waypoint x="1140" y="160"/><di:waypoint x="1160" y="160"/><di:waypoint x="1160" y="265"/><di:waypoint x="1180" y="265"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_08" bpmnElement="Flow_08"><di:waypoint x="1300" y="265"/><di:waypoint x="1320" y="265"/><di:waypoint x="1320" y="430"/><di:waypoint x="1340" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_01" bpmnElement="Flow_01">
+        <di:waypoint x="196" y="180"/>
+        <di:waypoint x="220" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_02" bpmnElement="Flow_02">
+        <di:waypoint x="340" y="180"/>
+        <di:waypoint x="380" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_03" bpmnElement="Flow_03">
+        <di:waypoint x="500" y="180"/>
+        <di:waypoint x="540" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_04" bpmnElement="Flow_04">
+        <di:waypoint x="670" y="475"/>
+        <di:waypoint x="710" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_05" bpmnElement="Flow_05">
+        <di:waypoint x="840" y="180"/>
+        <di:waypoint x="880" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_06" bpmnElement="Flow_06">
+        <di:waypoint x="1010" y="475"/>
+        <di:waypoint x="1050" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_07" bpmnElement="Flow_07">
+        <di:waypoint x="1180" y="180"/>
+        <di:waypoint x="1220" y="310"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_08" bpmnElement="Flow_08">
+        <di:waypoint x="1360" y="310"/>
+        <di:waypoint x="1400" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_09" bpmnElement="Flow_09">
+        <di:waypoint x="1540" y="475"/>
+        <di:waypoint x="1580" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_10" bpmnElement="Flow_10">
+        <di:waypoint x="1720" y="475"/>
+        <di:waypoint x="1760" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_11" bpmnElement="Flow_11">
+        <di:waypoint x="1900" y="475"/>
+        <di:waypoint x="1940" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_12" bpmnElement="Flow_12">
+        <di:waypoint x="2080" y="475"/>
+        <di:waypoint x="2120" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13_success" bpmnElement="Flow_13_success">
+        <di:waypoint x="2170" y="475"/>
+        <di:waypoint x="2240" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13_timeout" bpmnElement="Flow_13_timeout">
+        <di:waypoint x="2145" y="500"/>
+        <di:waypoint x="2145" y="675"/>
+        <di:waypoint x="2240" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13_error" bpmnElement="Flow_13_error">
+        <di:waypoint x="2170" y="475"/>
+        <di:waypoint x="2230" y="475"/>
+        <di:waypoint x="2230" y="540"/>
+        <di:waypoint x="2720" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_14" bpmnElement="Flow_14">
+        <di:waypoint x="2400" y="475"/>
+        <di:waypoint x="2430" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_15_yes" bpmnElement="Flow_15_yes">
+        <di:waypoint x="2480" y="462"/>
+        <di:waypoint x="2520" y="430"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_15_no" bpmnElement="Flow_15_no">
+        <di:waypoint x="2480" y="488"/>
+        <di:waypoint x="2520" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_16a" bpmnElement="Flow_16a">
+        <di:waypoint x="2680" y="430"/>
+        <di:waypoint x="2720" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_16b" bpmnElement="Flow_16b">
+        <di:waypoint x="2680" y="540"/>
+        <di:waypoint x="2720" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_17" bpmnElement="Flow_17">
+        <di:waypoint x="2890" y="675"/>
+        <di:waypoint x="2930" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_18" bpmnElement="Flow_18">
+        <di:waypoint x="3100" y="475"/>
+        <di:waypoint x="3195" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_19_confirm" bpmnElement="Flow_19_confirm">
+        <di:waypoint x="3220" y="155"/>
+        <di:waypoint x="3270" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_19_edit" bpmnElement="Flow_19_edit">
+        <di:waypoint x="3220" y="180"/>
+        <di:waypoint x="3270" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_19_cancel" bpmnElement="Flow_19_cancel">
+        <di:waypoint x="3195" y="205"/>
+        <di:waypoint x="3195" y="310"/>
+        <di:waypoint x="3270" y="310"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_20" bpmnElement="Flow_20">
+        <di:waypoint x="3400" y="140"/>
+        <di:waypoint x="3460" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_21" bpmnElement="Flow_21">
+        <di:waypoint x="3630" y="675"/>
+        <di:waypoint x="3755" y="1000"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_22" bpmnElement="Flow_22">
+        <di:waypoint x="3840" y="1040"/>
+        <di:waypoint x="3880" y="1040"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_23_yes" bpmnElement="Flow_23_yes">
+        <di:waypoint x="3930" y="1040"/>
+        <di:waypoint x="4055" y="715"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_23_no" bpmnElement="Flow_23_no">
+        <di:waypoint x="3930" y="1040"/>
+        <di:waypoint x="4010" y="1040"/>
+        <di:waypoint x="4010" y="570"/>
+        <di:waypoint x="4180" y="570"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_24" bpmnElement="Flow_24">
+        <di:waypoint x="4140" y="675"/>
+        <di:waypoint x="4180" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_25" bpmnElement="Flow_25">
+        <di:waypoint x="4340" y="475"/>
+        <di:waypoint x="4380" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_26" bpmnElement="Flow_26">
+        <di:waypoint x="4340" y="570"/>
+        <di:waypoint x="4380" y="585"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_27" bpmnElement="Flow_27">
+        <di:waypoint x="3400" y="225"/>
+        <di:waypoint x="3460" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_28" bpmnElement="Flow_28">
+        <di:waypoint x="3630" y="760"/>
+        <di:waypoint x="3670" y="475"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_29" bpmnElement="Flow_29">
+        <di:waypoint x="3840" y="475"/>
+        <di:waypoint x="3920" y="475"/>
+        <di:waypoint x="3920" y="180"/>
+        <di:waypoint x="1050" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_30" bpmnElement="Flow_30">
+        <di:waypoint x="3400" y="310"/>
+        <di:waypoint x="3460" y="845"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_31" bpmnElement="Flow_31">
+        <di:waypoint x="3630" y="845"/>
+        <di:waypoint x="3670" y="570"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_32" bpmnElement="Flow_32">
+        <di:waypoint x="3840" y="570"/>
+        <di:waypoint x="3880" y="570"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_33" bpmnElement="Flow_33">
+        <di:waypoint x="2410" y="675"/>
+        <di:waypoint x="2440" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_34_yes" bpmnElement="Flow_34_yes">
+        <di:waypoint x="2490" y="675"/>
+        <di:waypoint x="2520" y="665"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_34_no" bpmnElement="Flow_34_no">
+        <di:waypoint x="2465" y="650"/>
+        <di:waypoint x="2465" y="540"/>
+        <di:waypoint x="2720" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_35" bpmnElement="Flow_35">
+        <di:waypoint x="2680" y="665"/>
+        <di:waypoint x="2720" y="678"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_36" bpmnElement="Flow_36">
+        <di:waypoint x="2880" y="540"/>
+        <di:waypoint x="2920" y="540"/>
+      </bpmndi:BPMNEdge>
 
-      <bpmndi:BPMNEdge id="Edge_Flow_09" bpmnElement="Flow_09"><di:waypoint x="1460" y="430"/><di:waypoint x="1500" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_10" bpmnElement="Flow_10"><di:waypoint x="1620" y="430"/><di:waypoint x="1660" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_11" bpmnElement="Flow_11"><di:waypoint x="1780" y="430"/><di:waypoint x="1820" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_12" bpmnElement="Flow_12"><di:waypoint x="1940" y="430"/><di:waypoint x="1980" y="430"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_40" bpmnElement="Flow_40">
+        <di:waypoint x="196" y="870"/>
+        <di:waypoint x="220" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_41" bpmnElement="Flow_41">
+        <di:waypoint x="370" y="870"/>
+        <di:waypoint x="410" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_42_no" bpmnElement="Flow_42_no">
+        <di:waypoint x="435" y="895"/>
+        <di:waypoint x="435" y="960"/>
+        <di:waypoint x="520" y="960"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_42_yes" bpmnElement="Flow_42_yes">
+        <di:waypoint x="460" y="870"/>
+        <di:waypoint x="520" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_43" bpmnElement="Flow_43">
+        <di:waypoint x="670" y="870"/>
+        <di:waypoint x="710" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_44" bpmnElement="Flow_44">
+        <di:waypoint x="860" y="870"/>
+        <di:waypoint x="900" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_45" bpmnElement="Flow_45">
+        <di:waypoint x="1050" y="870"/>
+        <di:waypoint x="1090" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_46_success" bpmnElement="Flow_46_success">
+        <di:waypoint x="1140" y="870"/>
+        <di:waypoint x="1200" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_46_timeout" bpmnElement="Flow_46_timeout">
+        <di:waypoint x="1115" y="895"/>
+        <di:waypoint x="1115" y="760"/>
+        <di:waypoint x="2450" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_46_error" bpmnElement="Flow_46_error">
+        <di:waypoint x="1115" y="845"/>
+        <di:waypoint x="1115" y="740"/>
+        <di:waypoint x="2450" y="740"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_47" bpmnElement="Flow_47">
+        <di:waypoint x="1370" y="870"/>
+        <di:waypoint x="1410" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_48_yes" bpmnElement="Flow_48_yes">
+        <di:waypoint x="1460" y="857"/>
+        <di:waypoint x="1510" y="840"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_48_no" bpmnElement="Flow_48_no">
+        <di:waypoint x="1460" y="883"/>
+        <di:waypoint x="1510" y="940"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_49a" bpmnElement="Flow_49a">
+        <di:waypoint x="1680" y="840"/>
+        <di:waypoint x="1720" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_49b" bpmnElement="Flow_49b">
+        <di:waypoint x="1680" y="940"/>
+        <di:waypoint x="1720" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_50" bpmnElement="Flow_50">
+        <di:waypoint x="1900" y="675"/>
+        <di:waypoint x="1940" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_51" bpmnElement="Flow_51">
+        <di:waypoint x="2110" y="870"/>
+        <di:waypoint x="2150" y="870"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_52_yes" bpmnElement="Flow_52_yes">
+        <di:waypoint x="2200" y="857"/>
+        <di:waypoint x="2240" y="675"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_52_no" bpmnElement="Flow_52_no">
+        <di:waypoint x="2200" y="883"/>
+        <di:waypoint x="2240" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_53" bpmnElement="Flow_53">
+        <di:waypoint x="2410" y="760"/>
+        <di:waypoint x="2450" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_54" bpmnElement="Flow_54">
+        <di:waypoint x="2630" y="760"/>
+        <di:waypoint x="2680" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_55" bpmnElement="Flow_55">
+        <di:waypoint x="2400" y="675"/>
+        <di:waypoint x="2480" y="675"/>
+        <di:waypoint x="2480" y="180"/>
+        <di:waypoint x="3170" y="180"/>
+      </bpmndi:BPMNEdge>
 
-      <bpmndi:BPMNEdge id="Edge_Flow_13_yes" bpmnElement="Flow_13_yes"><di:waypoint x="2030" y="430"/><di:waypoint x="2100" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_13_no" bpmnElement="Flow_13_no"><di:waypoint x="2005" y="455"/><di:waypoint x="2005" y="510"/><di:waypoint x="2100" y="510"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_13_error" bpmnElement="Flow_13_error"><di:waypoint x="2030" y="430"/><di:waypoint x="2920" y="430"/><di:waypoint x="2920" y="500"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_14" bpmnElement="Flow_14"><di:waypoint x="2220" y="430"/><di:waypoint x="2260" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_15_yes" bpmnElement="Flow_15_yes"><di:waypoint x="2310" y="420"/><di:waypoint x="2380" y="400"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_15_no" bpmnElement="Flow_15_no"><di:waypoint x="2310" y="440"/><di:waypoint x="2380" y="510"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_16a" bpmnElement="Flow_16a"><di:waypoint x="2500" y="400"/><di:waypoint x="2560" y="400"/><di:waypoint x="2560" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_16b" bpmnElement="Flow_16b"><di:waypoint x="2500" y="510"/><di:waypoint x="2530" y="510"/><di:waypoint x="2530" y="860"/><di:waypoint x="2560" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_17" bpmnElement="Flow_17"><di:waypoint x="2680" y="860"/><di:waypoint x="2740" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_18_yes" bpmnElement="Flow_18_yes"><di:waypoint x="2790" y="845"/><di:waypoint x="2920" y="845"/><di:waypoint x="2920" y="470"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_18_no" bpmnElement="Flow_18_no"><di:waypoint x="2790" y="875"/><di:waypoint x="2920" y="875"/><di:waypoint x="2920" y="580"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_19" bpmnElement="Flow_19"><di:waypoint x="2980" y="430"/><di:waypoint x="3038" y="430"/><di:waypoint x="3038" y="842"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_20" bpmnElement="Flow_20"><di:waypoint x="2220" y="510"/><di:waypoint x="2260" y="510"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_21" bpmnElement="Flow_21"><di:waypoint x="2380" y="510"/><di:waypoint x="2420" y="510"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_22_yes" bpmnElement="Flow_22_yes"><di:waypoint x="2470" y="500"/><di:waypoint x="2540" y="510"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_22_no" bpmnElement="Flow_22_no"><di:waypoint x="2470" y="520"/><di:waypoint x="2860" y="540"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_23" bpmnElement="Flow_23"><di:waypoint x="2660" y="510"/><di:waypoint x="3038" y="510"/><di:waypoint x="3038" y="810"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_24" bpmnElement="Flow_24"><di:waypoint x="2736" y="660"/><di:waypoint x="2800" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_25" bpmnElement="Flow_25"><di:waypoint x="2920" y="660"/><di:waypoint x="2960" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_26" bpmnElement="Flow_26"><di:waypoint x="3080" y="660"/><di:waypoint x="3120" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_27" bpmnElement="Flow_27"><di:waypoint x="3240" y="660"/><di:waypoint x="3280" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_28" bpmnElement="Flow_28"><di:waypoint x="3400" y="660"/><di:waypoint x="3440" y="660"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_29_yes" bpmnElement="Flow_29_yes"><di:waypoint x="3465" y="685"/><di:waypoint x="3465" y="770"/><di:waypoint x="3560" y="770"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_29_no" bpmnElement="Flow_29_no"><di:waypoint x="3490" y="660"/><di:waypoint x="3560" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_29_error" bpmnElement="Flow_29_error"><di:waypoint x="3490" y="660"/><di:waypoint x="3490" y="770"/><di:waypoint x="4320" y="770"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_30" bpmnElement="Flow_30"><di:waypoint x="3680" y="770"/><di:waypoint x="4498" y="770"/><di:waypoint x="4498" y="852"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_31" bpmnElement="Flow_31"><di:waypoint x="3680" y="660"/><di:waypoint x="3720" y="660"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_32_yes" bpmnElement="Flow_32_yes"><di:waypoint x="3770" y="650"/><di:waypoint x="3840" y="640"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_32_no" bpmnElement="Flow_32_no"><di:waypoint x="3770" y="670"/><di:waypoint x="3840" y="750"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_33a" bpmnElement="Flow_33a"><di:waypoint x="3960" y="640"/><di:waypoint x="4020" y="640"/><di:waypoint x="4020" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_33b" bpmnElement="Flow_33b"><di:waypoint x="3960" y="750"/><di:waypoint x="3990" y="750"/><di:waypoint x="3990" y="860"/><di:waypoint x="4020" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_34" bpmnElement="Flow_34"><di:waypoint x="4140" y="860"/><di:waypoint x="4200" y="860"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_35_yes" bpmnElement="Flow_35_yes"><di:waypoint x="4250" y="845"/><di:waypoint x="4380" y="845"/><di:waypoint x="4380" y="700"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_35_no" bpmnElement="Flow_35_no"><di:waypoint x="4250" y="875"/><di:waypoint x="4380" y="875"/><di:waypoint x="4380" y="810"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_36" bpmnElement="Flow_36"><di:waypoint x="4440" y="660"/><di:waypoint x="4480" y="430"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_37" bpmnElement="Flow_37"><di:waypoint x="4600" y="430"/><di:waypoint x="4678" y="430"/><di:waypoint x="4678" y="842"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_38" bpmnElement="Flow_38"><di:waypoint x="4440" y="770"/><di:waypoint x="4498" y="770"/><di:waypoint x="4498" y="852"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Flow_39" bpmnElement="Flow_39"><di:waypoint x="2980" y="540"/><di:waypoint x="3038" y="540"/><di:waypoint x="3038" y="910"/></bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Edge_Association_LoggingAndNotes" bpmnElement="Association_LoggingAndNotes">
-        <di:waypoint x="4696" y="860"/>
-        <di:waypoint x="4780" y="810"/>
+      <bpmndi:BPMNEdge id="Edge_Association_RuntimeAndUXNotes" bpmnElement="Association_RuntimeAndUXNotes">
+        <di:waypoint x="670" y="435"/>
+        <di:waypoint x="4520" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Association_ProcessingNotes" bpmnElement="Association_ProcessingNotes">
+        <di:waypoint x="3840" y="1040"/>
+        <di:waypoint x="4520" y="515"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Association_LoggingNotes" bpmnElement="Association_LoggingNotes">
+        <di:waypoint x="2630" y="760"/>
+        <di:waypoint x="4520" y="855"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

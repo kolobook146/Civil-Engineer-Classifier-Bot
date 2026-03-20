@@ -22,8 +22,13 @@ class PromptBuilder:
             "For volume, return a JSON decimal number or null (use dot as decimal separator).\n"
             "For unit, return exactly one canonical ASCII unit key from the unit dictionary (left side before ':') or null.\n"
             "Do not return Russian unit abbreviations if an ASCII dictionary key exists.\n"
-            "For workType, stage, and function, only one dictionary value or null is allowed.\n"
-            "If a field is missing in the message, return null.\n"
+            "For workType, only one dictionary value or null is allowed.\n"
+            "For stage and function:\n"
+            "- MUST return exactly one value from the corresponding dictionary.\n"
+            "- NEVER return null for stage or function.\n"
+            "- If explicit evidence is weak or missing, infer the closest semantic match from the message.\n"
+            "- If multiple options are close, choose the most probable one and put ambiguity notes into comment.\n"
+            "If a field is missing in the message, return null, except stage and function which must still be selected.\n"
             f"{self.build_stage_function_hint()}\n"
             "\n"
             "Unit dictionary:\n"
@@ -52,8 +57,8 @@ class PromptBuilder:
     def build_stage_function_hint() -> str:
         return (
             "Pilot definitions:\n"
-            "- stage: process/project stage.\n"
-            "- function: functional work block."
+            "- function = functional workstream (what is being delivered/managed).\n"
+            "- stage = lifecycle gate within a function (where this workstream is now)."
         )
 
     def buildStageFunctionHint(self) -> str:

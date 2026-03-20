@@ -24,6 +24,14 @@ class NotificationService:
         "function",
         "comment",
     )
+    _FIELD_LABELS: dict[str, str] = {
+        "volume": "Volume",
+        "unit": "Unit",
+        "workType": "Work type",
+        "stage": "Stage",
+        "function": "Function",
+        "comment": "Comment",
+    }
     _MAX_COMMENT_PREVIEW_CHARS = 700
 
     def __init__(
@@ -34,29 +42,18 @@ class NotificationService:
     ) -> None:
         self._logging_service = logging_service
         self._correlation_id_factory = correlation_id_factory
-        self._welcome_text = (
-            "Main menu.\n"
-            "Choose an action below. "
-            "The bot can accept a progress report, show guidance, and provide an example."
-        )
+        self._welcome_text = "Select an action.\nNext: choose Report Progress or Help."
         self._help_text = (
-            "How to use the bot:\n"
-            "1. Press \"Report Progress\".\n"
-            "2. Send one free-form text report.\n"
-            "3. Review the extracted data.\n"
-            "4. Confirm the record or correct the message."
+            "Use Report Progress to send one message.\n"
+            "Next: tap Report Progress."
         )
         self._input_instruction_text = (
-            "Send one free-form progress update in a single message.\n"
-            "For example: \"Poured 20 m3 of concrete in gridlines 3-5.\"\n"
-            "Use the regular Telegram message field ⌨️ and the standard Send button. "
-            "The buttons below only help: show an example or cancel input."
+            "Send one progress fact in a single message ⌨️\n"
+            "Next: type your report and press Send."
         )
         self._example_text = (
-            "Example messages:\n"
-            "• Poured 20 m3 of concrete in gridlines 3-5.\n"
-            "• Completed the marketing tender.\n"
-            "• Finished electrical installation for 12 m2 in room A."
+            "Example: Poured 20 m3 of concrete in gridlines 3-5.\n"
+            "Next: send your own report."
         )
 
     async def send_welcome(
@@ -92,14 +89,14 @@ class NotificationService:
         if prefix_text:
             text = f"{prefix_text}\n\n{text}"
         if isinstance(reply_markup, InlineKeyboardMarkup):
-            await target_message.reply_text(
-                text=text,
-                reply_markup=ReplyKeyboardRemove(),
-            )
-            await target_message.reply_text(
-                text="Quick actions:",
-                reply_markup=reply_markup,
-            )
+            sent = await target_message.reply_text(text=text, reply_markup=ReplyKeyboardRemove())
+            try:
+                await sent.edit_reply_markup(reply_markup=reply_markup)
+            except Exception:
+                await target_message.reply_text(
+                    text="Quick actions.",
+                    reply_markup=reply_markup,
+                )
             return
 
         await target_message.reply_text(text=text, reply_markup=reply_markup)
@@ -114,7 +111,7 @@ class NotificationService:
         reply_markup: ReplyKeyboardMarkup,
     ) -> None:
         await target_message.reply_text(
-            "Input cancelled. You can return to the main menu or start a new entry later.",
+            "Cancelled.\nNext: choose an action.",
             reply_markup=reply_markup,
         )
 
@@ -128,22 +125,18 @@ class NotificationService:
     ) -> None:
         formatted_payload = self._format_payload_for_user(classification_payload)
         await target_message.reply_text(
-            "Review the data before writing to Google Sheets:\n"
+            "Review before saving to Google Sheets.\n"
             f"{formatted_payload}\n"
-            f"Classification status: {status}",
+            f"Status: {status}\n"
+            "Next: choose Confirm, Edit, or Cancel.",
             reply_markup=reply_markup,
         )
 
     async def send_processing_error(self, *, target_message: Message) -> None:
-        await target_message.reply_text(
-            "The message could not be processed. Please send it again."
-        )
+        await target_message.reply_text("Could not process. Try again.")
 
     async def send_queued_notice(self, *, target_message: Message) -> None:
-        await target_message.reply_text(
-            "The LLM is busy, so the message has been queued. "
-            "Once processing is complete, I will send a confirmation card before saving."
-        )
+        await target_message.reply_text("Queued. I'll send a confirmation card when ready.")
 
     async def send_record_saved(
         self,
@@ -153,11 +146,8 @@ class NotificationService:
         status: str,
         reply_markup: InlineKeyboardMarkup,
     ) -> None:
-        formatted_payload = self._format_payload_for_user(classification_payload)
         await target_message.reply_text(
-            "The data has been saved to Google Sheets:\n"
-            f"{formatted_payload}\n"
-            f"Status: {status}",
+            f"Saved.\nStatus: {status}\nNext: choose Report Another or Main Menu.",
             reply_markup=reply_markup,
         )
 
@@ -177,10 +167,10 @@ class NotificationService:
         await bot.send_message(
             chat_id=chat_ref,
             text=(
-                "The queued message has been processed. "
-                "Review the data and confirm writing to Google Sheets:\n"
+                "Review before saving to Google Sheets.\n"
                 f"{formatted_payload}\n"
-                f"Classification status: {status}"
+                f"Status: {status}\n"
+                "Next: choose Confirm, Edit, or Cancel."
             ),
             reply_markup=reply_markup,
         )
@@ -204,7 +194,7 @@ class NotificationService:
         reply_markup: ReplyKeyboardMarkup,
     ) -> None:
         await target_message.reply_text(
-            "The record was cancelled. You can return to the main menu or send a new report.",
+            "Cancelled.\nNext: choose an action.",
             reply_markup=reply_markup,
         )
 
@@ -217,23 +207,26 @@ class NotificationService:
                 display = cls._format_comment_preview(value)
             else:
                 display = cls._format_scalar(value)
-            lines.append(f"- {field}: {display}")
-        return "\n".join(lines)
+            if display is None:
+                continue
+            label = cls._FIELD_LABELS.get(field, field)
+            lines.append(f"- {label}: {display}")
+        return "\n".join(lines) if lines else "- No structured fields extracted."
 
     @staticmethod
-    def _format_scalar(value: str | int | float | None) -> str:
+    def _format_scalar(value: str | int | float | None) -> str | None:
         if value is None:
-            return "null"
+            return None
         if isinstance(value, (int, float)):
             return str(value)
         normalized = value.strip()
-        return normalized if normalized else "null"
+        return normalized if normalized else None
 
     @classmethod
-    def _format_comment_preview(cls, value: str | int | float | None) -> str:
+    def _format_comment_preview(cls, value: str | int | float | None) -> str | None:
         scalar = cls._format_scalar(value)
-        if scalar == "null":
-            return scalar
+        if scalar is None:
+            return None
 
         single_line = scalar.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " | ")
         if len(single_line) <= cls._MAX_COMMENT_PREVIEW_CHARS:

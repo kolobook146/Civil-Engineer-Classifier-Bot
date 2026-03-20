@@ -50,6 +50,7 @@ def main() -> None:
         logging_service=logging_service,
         processing_path="online",
         llm_timeout_seconds=settings.llm.timeout_seconds,
+        llm_preflight_enabled=settings.llm.preflight_enabled,
     ).run()
     application = build_application(
         settings,

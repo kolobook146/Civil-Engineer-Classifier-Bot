@@ -1,0 +1,16 @@
+label	description
+Project Management & Controls	
+Investment & Financing	
+Legal & Contract Management	
+Sales & Marketing	
+Land & Cadastral Management	
+Permits & Authority Approvals	
+Utility Connections Management	
+Engineering Surveys	
+Master Planning & Concept Development	Pre-design integrated concept defining site planning, spatial-functional structure, urban context integration, mobility links, key volumetric solutions, and baseline technical-economic parameters for subsequent design and approvals.
+Design Management	
+Expert Review & Compliance	
+Material & Technical Supply	
+Construction Execution	
+Commissioning & Handover	
+Quality, HSE & Technical Supervision	

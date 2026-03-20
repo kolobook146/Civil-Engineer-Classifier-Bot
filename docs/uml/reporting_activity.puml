@@ -1,27 +1,27 @@
 @startuml
-title UML Activity - TG Build Bot Online Polling Flow (Pilot)
+title UML Activity - TG Build Bot Online Ingress Flow (Pilot)
 
 start
 
-partition PollingProcess {
-  :Log event polling_started;
+partition Runtime {
+  :Polling or webhook runtime is active;
 }
 
 partition User {
   :Open chat with bot;
-  :Press /start (first time);
+  :Press /start;
 }
 
 partition BotOnline {
-  :Send welcome message with "Report Progress" button;
+  :Send welcome message + main menu;
 }
 
 partition User {
-  :Press "Report Progress";
+  :Press Report Progress;
 }
 
 partition BotOnline {
-  :Send input instruction message;
+  :Send input instruction;
 }
 
 partition User {
@@ -29,14 +29,14 @@ partition User {
 }
 
 partition Telegram {
-  :Receive update (Polling);
+  :Receive update (Polling or Webhook);
 }
 
 partition BotOnline {
   :Log event message_received;
   :Preprocess text (trim, normalize spaces);
   :Build TelegramMessageMeta;
-  :Load dictionaries from text files (units/work types/stages/functions);
+  :Load dictionaries from text files;
   :Build Gemini prompt;
   :Call Gemini via google-genai SDK (timeout 30 sec);
 }
@@ -44,47 +44,93 @@ partition BotOnline {
 if (Gemini call successful?) then (yes)
   partition BotOnline {
     :Log event llm_response_received;
-    :Validate JSON schema + dictionary constraints (including unit);
+    :Normalize LLM payload;
+    :Validate JSON schema + dictionary constraints;
   }
 
   if (JSON valid?) then (yes)
     partition BotOnline {
       :Log event json_validation_passed;
-      :Map structured fields from JSON;
+      :Build DataFactRecord;
       :Set status = PROCESSED;
     }
   else (no)
     partition BotOnline {
       :Log event json_validation_failed;
-      :Fallback mapper - full raw LLM response in comment;
+      :Build fallback DataFactRecord;
       :Set status = PROCESSED_WITH_FALLBACK;
     }
   endif
 
-  partition GoogleSheets {
-    :Append row to data_facts;
+  partition SQLite {
+    :Create PendingConfirmation draft;
   }
 
-  if (Sheets write successful?) then (yes)
-    partition BotOnline {
-      :Log event sheets_write_success;
-      :Send immediate confirmation;
+  partition BotOnline {
+    :Send confirmation card (Confirm / Edit / Cancel);
+  }
+
+  if (User decision?) then (Confirm)
+    partition SQLite {
+      :Load PendingConfirmation by confirmation_id;
     }
-    stop
-  else (no)
+
+    partition GoogleSheets {
+      :Append confirmed row to data_facts;
+    }
+
+    if (Sheets write successful?) then (yes)
+      partition SQLite {
+        :Delete PendingConfirmation;
+      }
+
+      partition BotOnline {
+        :Log event sheets_write_success;
+        :Send Saved + post-save actions;
+      }
+      stop
+    else (no)
+      partition BotOnline {
+        :Log event sheets_write_failed;
+        :Send processing error;
+      }
+      note right
+        The draft is intentionally kept,
+        so the user can retry Confirm later.
+      end note
+      stop
+    endif
+
+  else (Edit)
+    partition SQLite {
+      :Delete PendingConfirmation draft;
+    }
+
     partition BotOnline {
-      :Log event classification_failed;
-      :Send processing error;
+      :Send corrected input instruction;
+    }
+    note right
+      User sends a corrected message and
+      restarts the same online classification flow.
+    end note
+    stop
+
+  else (Cancel)
+    partition SQLite {
+      :Delete PendingConfirmation draft;
+    }
+
+    partition BotOnline {
+      :Send cancelled + main menu;
     }
     stop
   endif
 
 else (no)
   if (Timeout?) then (yes)
-    partition BotOnline {
-      :Log event llm_timeout;
+    partition SQLite {
       :Build QueueTask;
-      :Enqueue message to queue repository;
+      :Enqueue queue task;
     }
 
     if (Enqueue successful?) then (yes)
@@ -100,6 +146,7 @@ else (no)
       }
       stop
     endif
+
   else (error)
     partition BotOnline {
       :Log event classification_failed;
@@ -110,11 +157,12 @@ else (no)
 endif
 
 note right
-  Queue worker flow is documented separately in:
-  docs/uml/reporting_queue_worker_activity.puml
+  This activity shows the primary online ingress path.
+  Lightweight UI branches such as Help, Show Example,
+  and input cancel are omitted for readability.
 
-  Structured logging contract:
-  docs/logging/logging_spec.md
+  Queue worker processing is documented separately in:
+  docs/uml/reporting_queue_worker_activity.puml
 end note
 
 @enduml

@@ -88,6 +88,7 @@ class LLMSettings:
     api_key: str
     model: str
     timeout_seconds: int
+    preflight_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -160,7 +161,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    dictionaries_dir = Path(_get_env("DICTIONARIES_DIR", "dictionaries"))
+    dictionaries_dir = Path(_get_env("DICTIONARIES_DIR", "docs/business/dictionaries"))
 
     return Settings(
         app=AppSettings(
@@ -187,6 +188,7 @@ def load_settings() -> Settings:
             api_key=_get_env("LLM_API_KEY", ""),
             model=_get_env("LLM_MODEL", "gemini-2.5-flash"),
             timeout_seconds=_get_int_env("LLM_TIMEOUT_SECONDS", 30),
+            preflight_enabled=_get_bool_env("LLM_PREFLIGHT_ENABLED", True),
         ),
         dictionaries=DictionarySettings(
             directory=dictionaries_dir,

@@ -18,6 +18,7 @@ class StartupPreflightResult:
     functions_count: int
     units_count: int
     llm_model: str
+    llm_preflight_enabled: bool
     llm_preflight_timeout_seconds: int
     worksheet_name: str
     header_count: int
@@ -37,6 +38,7 @@ class StartupPreflight:
         logging_service: LoggingService,
         processing_path: ProcessingPath,
         llm_timeout_seconds: int,
+        llm_preflight_enabled: bool = True,
     ) -> None:
         self._dictionary_repository = dictionary_repository
         self._gemini_client = gemini_client
@@ -44,6 +46,7 @@ class StartupPreflight:
         self._logging_service = logging_service
         self._processing_path = processing_path
         self._llm_timeout_seconds = llm_timeout_seconds
+        self._llm_preflight_enabled = llm_preflight_enabled
 
     def run(self) -> StartupPreflightResult:
         self._logging_service.info(
@@ -65,9 +68,21 @@ class StartupPreflight:
                 }
             )
 
-            llm_timeout_seconds = self._GEMINI_MIN_PREFLIGHT_TIMEOUT_SECONDS
-            llm_payload = self._gemini_client.preflight_check(timeout_seconds=llm_timeout_seconds)
-            payload.update(llm_payload)
+            if self._llm_preflight_enabled:
+                llm_timeout_seconds = self._GEMINI_MIN_PREFLIGHT_TIMEOUT_SECONDS
+                llm_payload = self._gemini_client.preflight_check(
+                    timeout_seconds=llm_timeout_seconds
+                )
+                payload.update(llm_payload)
+            else:
+                payload.update(
+                    {
+                        "llm_model": self._gemini_client.model,
+                        "llm_preflight_enabled": False,
+                        "llm_preflight_timeout_seconds": 0,
+                        "llm_preflight_response_length": 0,
+                    }
+                )
 
             sheets_payload = self._google_sheets_repository.preflight_check()
             payload.update(sheets_payload)
@@ -91,6 +106,7 @@ class StartupPreflight:
             functions_count=int(payload["functions_count"]),
             units_count=int(payload["units_count"]),
             llm_model=str(payload["llm_model"]),
+            llm_preflight_enabled=bool(payload["llm_preflight_enabled"]),
             llm_preflight_timeout_seconds=int(payload["llm_preflight_timeout_seconds"]),
             worksheet_name=str(payload["worksheet_name"]),
             header_count=int(payload["header_count"]),

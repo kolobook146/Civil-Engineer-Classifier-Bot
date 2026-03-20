@@ -109,6 +109,7 @@ def main() -> None:
         logging_service=logging_service,
         processing_path="queue",
         llm_timeout_seconds=settings.llm.timeout_seconds,
+        llm_preflight_enabled=settings.llm.preflight_enabled,
     ).run()
     queue_worker, bot = build_queue_worker(
         settings,

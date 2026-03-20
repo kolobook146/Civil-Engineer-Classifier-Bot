@@ -220,6 +220,7 @@ cp .env.example .env
 - `LLM_API_KEY`
 - `GOOGLE_SHEETS_SPREADSHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_FILE`
+- `LLM_PREFLIGHT_ENABLED` (`false` for active dev/debug with frequent restarts, `true` before production rollout)
 
 ### 11.3 Start the Services
 

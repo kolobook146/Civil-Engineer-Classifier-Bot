@@ -114,8 +114,8 @@ class TelegramPollingHandler:
     def _build_confirmation_keyboard(cls, confirmation_id: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton(text="Confirm", callback_data=f"{cls._CALLBACK_CONFIRM_PREFIX}{confirmation_id}")],
                 [
+                    InlineKeyboardButton(text="Confirm", callback_data=f"{cls._CALLBACK_CONFIRM_PREFIX}{confirmation_id}"),
                     InlineKeyboardButton(text="Edit", callback_data=f"{cls._CALLBACK_EDIT_PREFIX}{confirmation_id}"),
                     InlineKeyboardButton(text="Cancel", callback_data=f"{cls._CALLBACK_CANCEL_PREFIX}{confirmation_id}"),
                 ],
@@ -192,8 +192,10 @@ class TelegramPollingHandler:
         await query.answer()
         if query.message is None:
             return
-
-        await self._notification_service.send_example(target_message=query.message)
+        await query.edit_message_text(
+            text="Example: Poured 20 m3 of concrete in gridlines 3-5.\nNext: send your own report.",
+            reply_markup=self._build_input_action_keyboard(),
+        )
 
     async def cancel_input_callback(
         self,

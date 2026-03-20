@@ -8,3 +8,4 @@ Advance payment
 Procurement
 Execution
 Control
+Closeout & Handover
