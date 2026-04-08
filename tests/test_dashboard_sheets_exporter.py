@@ -46,7 +46,7 @@ def test_parse_a1_range_rejects_invalid_range() -> None:
         DashboardSheetsExporter.parse_a1_range("X38:A1")
 
 
-def test_build_pdf_export_url_uses_chart_safe_scale_and_bounds() -> None:
+def test_build_pdf_export_url_uses_single_page_a4_dashboard_layout() -> None:
     url = DashboardSheetsExporter.build_pdf_export_url(
         spreadsheet_id="spreadsheet-123",
         worksheet_id=987654321,
@@ -64,8 +64,11 @@ def test_build_pdf_export_url_uses_chart_safe_scale_and_bounds() -> None:
     assert "c1=0" in url
     assert "r2=38" in url
     assert "c2=24" in url
+    assert "size=7" in url
     assert "portrait=false" in url
-    assert "scale=1" in url
+    assert "scale=3" in url
+    assert "left_margin=0" in url
+    assert "right_margin=0" in url
     assert "fitw=" not in url
 
 
