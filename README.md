@@ -28,6 +28,7 @@ In scope for the pilot:
 - strict JSON validation of the LLM output before persistence;
 - fallback logic for invalid JSON;
 - writing data to Google Sheets (`data_facts`);
+- on-demand dashboard export from `dashboard_visual!A1:X38` to a local archive (`PDF + JPEG`) with JPEG delivery to Telegram;
 - a deferred-processing queue with post-factum user notification.
 
 Out of scope for the pilot (post-pilot):
@@ -43,10 +44,10 @@ Out of scope for the pilot (post-pilot):
 
 1. The user opens a chat with the bot.
 2. The user presses `/start`.
-3. The bot sends a welcome message and offers `Report Progress`.
-4. The user presses `Report Progress`.
-5. The bot sends instructions for free-form input.
-6. The user submits a free-form message.
+3. The bot sends a welcome message and offers `Report Progress`, `Dashboard`, and `Help`.
+4. The user either:
+   - presses `Report Progress`, receives input instructions, and submits a free-form message; or
+   - presses `Dashboard`, and the bot exports `dashboard_visual!A1:X38` from Google Sheets, archives `PDF + JPEG` locally, and sends the JPEG preview back to Telegram.
 
 ### 3.2 Message Processing
 
@@ -109,6 +110,23 @@ If the LLM does not respond within 30 seconds:
 4. After successful persistence, the user receives a post-factum notification:
    - `Queued message has been recorded`.
 
+### 3.7 Dashboard Preview Export
+
+- The bot exposes an on-demand `Dashboard` menu action.
+- The dashboard preview is exported from the same Google Sheets workbook used by the pilot.
+- Source sheet and range are configuration-driven and default to:
+  - worksheet: `dashboard_visual`
+  - range: `A1:X38`
+- Export flow:
+  - Google Sheets range -> PDF export
+  - PDF -> local archive
+  - PDF -> JPEG conversion via macOS `sips`
+  - JPEG -> local archive
+  - JPEG -> Telegram `photo`
+- Successful exports are archived locally in `var/dashboard_exports/` by default.
+- Archive retention in v1 is unlimited; files are not auto-pruned.
+- This is a read-only reporting path and does not mutate the workbook.
+
 ## 4. Non-Functional Requirements
 
 ### 4.1 Reliability
@@ -139,7 +157,8 @@ If the LLM does not respond within 30 seconds:
   - LLM response/timeout,
   - validation result,
   - Google Sheets write result,
-  - queue enqueue/dequeue.
+  - queue enqueue/dequeue,
+  - dashboard export request/success/failure.
 - Detailed logging specification: `docs/logging/logging_spec.md`.
 
 ## 5. Target Audience
@@ -155,6 +174,7 @@ If the LLM does not respond within 30 seconds:
 - Backend: Python service (Linux/macOS).
 - Storage integration: Google Sheets API.
 - LLM provider: Google Gemini API (`gemini-2.5-flash`) via native `google-genai` SDK.
+- Reporting preview: Google Sheets PDF export + local JPEG conversion (`sips`) for Telegram photo delivery.
 
 ## 7. Pilot Constraints
 
@@ -164,6 +184,8 @@ If the LLM does not respond within 30 seconds:
 - No deduplication by `chat_id + message_id`.
 - Unit aliases normalization is still out of scope (verification is done against the units dictionary).
 - `volume` is stored as `Decimal` in the domain model and persisted as normalized decimal text in Google Sheets.
+- Dashboard JPEG preview in v1 relies on macOS `sips` for PDF-to-image conversion on the bot host.
+- Dashboard exports are archived as runtime files in `var/dashboard_exports/` and are not auto-cleaned in v1.
 
 ## 8. Preferred Technologies
 
@@ -190,6 +212,7 @@ If the LLM does not respond within 30 seconds:
 4. With invalid JSON, raw LLM output is written to `comment`.
 5. On a 30-second timeout, the message is queued and later processed.
 6. After queue processing, the user receives a post-factum notification.
+7. On `Dashboard`, the user receives a JPEG preview of `dashboard_visual!A1:X38`.
 
 ## 11. Run Process
 
@@ -200,6 +223,8 @@ If the LLM does not respond within 30 seconds:
 - Gemini API key
 - Google service account JSON key file
 - Access granted to the target Google Sheets document for the service account
+- macOS host with `/usr/bin/sips` available if dashboard JPEG preview is enabled
+- Writable local runtime directory for dashboard archive storage (`var/dashboard_exports/` by default)
 
 ### 11.2 Setup
 
@@ -218,6 +243,12 @@ cp .env.example .env
 3. Fill required values in `.env`:
 - `TG_BOT_TOKEN`
 - `LLM_API_KEY`
+- `GOOGLE_SHEETS_SPREADSHEET_ID`
+
+Optional dashboard export overrides:
+- `GOOGLE_SHEETS_DASHBOARD_WORKSHEET_NAME` (default `dashboard_visual`)
+- `GOOGLE_SHEETS_DASHBOARD_EXPORT_RANGE` (default `A1:X38`)
+- `GOOGLE_SHEETS_DASHBOARD_ARCHIVE_DIR` (default `var/dashboard_exports`)
 - `GOOGLE_SHEETS_SPREADSHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_FILE`
 - `LLM_PREFLIGHT_ENABLED` (`false` for active dev/debug with frequent restarts, `true` before production rollout)

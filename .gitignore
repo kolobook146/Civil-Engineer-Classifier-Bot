@@ -38,6 +38,7 @@ htmlcov/
 # Runtime files
 var/log/
 var/queue/
+var/dashboard_exports/
 *.log
 *.sqlite3
 

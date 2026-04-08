@@ -2,18 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 
-from application.classification_orchestrator import ClassificationOrchestrator
-from application.message_preprocessor import MessagePreprocessor
-from domain.enums import ProcessingStatus
-from domain.models import build_message_meta, build_queue_task
-from infrastructure.gemini_client import LLMTimeoutError
-from infrastructure.pending_confirmation_repository import PendingConfirmationRepository
-from infrastructure.queue_repository import QueueRepository
-from observability.correlation_id_factory import CorrelationIdFactory
-from observability.log_context import LogContext
-from observability.log_events import LogEvent
-from observability.logging_service import LoggingService
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -30,6 +20,27 @@ from telegram.ext import (
     filters,
 )
 
+from application.classification_orchestrator import ClassificationOrchestrator
+from application.message_preprocessor import MessagePreprocessor
+from domain.enums import ProcessingStatus
+from domain.models import build_message_meta, build_queue_task
+from infrastructure.dashboard_sheets_exporter import (
+    DashboardConversionError,
+    DashboardExportArtifact,
+    DashboardExportError,
+    DashboardPdfDownloadError,
+    DashboardPdfWriteError,
+    DashboardSheetsExporter,
+    DashboardWorksheetNotFoundError,
+)
+from infrastructure.gemini_client import LLMTimeoutError
+from infrastructure.pending_confirmation_repository import PendingConfirmationRepository
+from infrastructure.queue_repository import QueueRepository
+from observability.correlation_id_factory import CorrelationIdFactory
+from observability.log_context import LogContext
+from observability.log_events import LogEvent
+from observability.logging_service import LoggingService
+
 from .notification_service import NotificationService
 
 
@@ -37,6 +48,7 @@ class TelegramPollingHandler:
     """Receives Telegram updates and routes them to the pilot interaction flow."""
 
     _BUTTON_REPORT = "Report Progress"
+    _BUTTON_DASHBOARD = "Dashboard"
     _BUTTON_HELP = "Help"
     _BUTTON_MAIN_MENU = "Main Menu"
 
@@ -53,6 +65,7 @@ class TelegramPollingHandler:
         notification_service: NotificationService,
         message_preprocessor: MessagePreprocessor,
         classification_orchestrator: ClassificationOrchestrator,
+        dashboard_exporter: DashboardSheetsExporter,
         queue_repository: QueueRepository,
         pending_confirmation_repository: PendingConfirmationRepository,
         logging_service: LoggingService,
@@ -61,6 +74,7 @@ class TelegramPollingHandler:
         self._notification_service = notification_service
         self._message_preprocessor = message_preprocessor
         self._classification_orchestrator = classification_orchestrator
+        self._dashboard_exporter = dashboard_exporter
         self._queue_repository = queue_repository
         self._pending_confirmation_repository = pending_confirmation_repository
         self._logging_service = logging_service
@@ -69,34 +83,64 @@ class TelegramPollingHandler:
     def register(self, application: Application) -> None:
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(
-            CallbackQueryHandler(self.report_execution_callback, pattern=rf"^{self._CALLBACK_REPORT}$")
+            CallbackQueryHandler(
+                self.report_execution_callback,
+                pattern=rf"^{self._CALLBACK_REPORT}$",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.main_menu_callback, pattern=rf"^{self._CALLBACK_MAIN_MENU}$")
+            CallbackQueryHandler(
+                self.main_menu_callback,
+                pattern=rf"^{self._CALLBACK_MAIN_MENU}$",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.show_example_callback, pattern=rf"^{self._CALLBACK_SHOW_EXAMPLE}$")
+            CallbackQueryHandler(
+                self.show_example_callback,
+                pattern=rf"^{self._CALLBACK_SHOW_EXAMPLE}$",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.cancel_input_callback, pattern=rf"^{self._CALLBACK_CANCEL_INPUT}$")
+            CallbackQueryHandler(
+                self.cancel_input_callback,
+                pattern=rf"^{self._CALLBACK_CANCEL_INPUT}$",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.confirm_record_callback, pattern=rf"^{self._CALLBACK_CONFIRM_PREFIX}")
+            CallbackQueryHandler(
+                self.confirm_record_callback,
+                pattern=rf"^{self._CALLBACK_CONFIRM_PREFIX}",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.edit_record_callback, pattern=rf"^{self._CALLBACK_EDIT_PREFIX}")
+            CallbackQueryHandler(
+                self.edit_record_callback,
+                pattern=rf"^{self._CALLBACK_EDIT_PREFIX}",
+            )
         )
         application.add_handler(
-            CallbackQueryHandler(self.cancel_record_callback, pattern=rf"^{self._CALLBACK_CANCEL_PREFIX}")
+            CallbackQueryHandler(
+                self.cancel_record_callback,
+                pattern=rf"^{self._CALLBACK_CANCEL_PREFIX}",
+            )
         )
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.free_text_handler))
+        application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                self.free_text_handler,
+            )
+        )
         application.add_error_handler(self.error_handler)
 
     @classmethod
     def _build_main_menu_keyboard(cls) -> ReplyKeyboardMarkup:
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text=cls._BUTTON_REPORT), KeyboardButton(text=cls._BUTTON_HELP)],
+                [
+                    KeyboardButton(text=cls._BUTTON_REPORT),
+                    KeyboardButton(text=cls._BUTTON_DASHBOARD),
+                ],
+                [KeyboardButton(text=cls._BUTTON_HELP)],
             ],
             resize_keyboard=True,
         )
@@ -115,9 +159,18 @@ class TelegramPollingHandler:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(text="Confirm", callback_data=f"{cls._CALLBACK_CONFIRM_PREFIX}{confirmation_id}"),
-                    InlineKeyboardButton(text="Edit", callback_data=f"{cls._CALLBACK_EDIT_PREFIX}{confirmation_id}"),
-                    InlineKeyboardButton(text="Cancel", callback_data=f"{cls._CALLBACK_CANCEL_PREFIX}{confirmation_id}"),
+                    InlineKeyboardButton(
+                        text="Confirm",
+                        callback_data=f"{cls._CALLBACK_CONFIRM_PREFIX}{confirmation_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="Edit",
+                        callback_data=f"{cls._CALLBACK_EDIT_PREFIX}{confirmation_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="Cancel",
+                        callback_data=f"{cls._CALLBACK_CANCEL_PREFIX}{confirmation_id}",
+                    ),
                 ],
             ]
         )
@@ -229,6 +282,9 @@ class TelegramPollingHandler:
                 target_message=message,
                 reply_markup=self._build_input_action_keyboard(),
             )
+            return
+        if stripped_text == self._BUTTON_DASHBOARD:
+            await self._handle_dashboard_request(update=update, message=message)
             return
         if stripped_text == self._BUTTON_HELP:
             await self._notification_service.send_help(
@@ -498,6 +554,218 @@ class TelegramPollingHandler:
             reply_markup=self._build_main_menu_keyboard(),
         )
 
+    async def _handle_dashboard_request(self, *, update: Update, message) -> None:
+        chat_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        user_id = str(update.effective_user.id) if update.effective_user else "unknown"
+        message_id = str(message.message_id)
+        trace_id = self._correlation_id_factory.build_trace_id(chat_id, message_id)
+        log_payload = {
+            "worksheet_name": self._dashboard_exporter.worksheet_name,
+            "export_range": self._dashboard_exporter.export_range,
+            "output_format": self._dashboard_exporter.output_format,
+        }
+        log_context = LogContext(
+            trace_id=trace_id,
+            chat_id=chat_id,
+            user_id=user_id,
+            message_id=message_id,
+            processing_path="online",
+            status="REQUESTED",
+        )
+        self._logging_service.info(
+            event=LogEvent.dashboard_export_requested,
+            component="telegram_polling_handler",
+            context=log_context,
+            payload=log_payload,
+        )
+        await self._notification_service.send_dashboard_preparing(target_message=message)
+
+        started_at = time.perf_counter()
+        artifact: DashboardExportArtifact | None = None
+        try:
+            artifact = await asyncio.to_thread(self._dashboard_exporter.export_dashboard_preview)
+            try:
+                await self._notification_service.send_dashboard_preview(
+                    target_message=message,
+                    image_path=artifact.image_path,
+                    worksheet_name=artifact.worksheet_name,
+                    export_range=artifact.export_range,
+                )
+            except Exception as exc:
+                self._logging_service.error(
+                    event=LogEvent.dashboard_export_failed,
+                    component="telegram_polling_handler",
+                    context=LogContext(
+                        trace_id=trace_id,
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        message_id=message_id,
+                        processing_path="online",
+                        status="FAILED",
+                    ),
+                    payload={
+                        **log_payload,
+                        "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                        "failure_stage": "telegram_send",
+                    },
+                )
+                await self._notification_service.send_dashboard_unavailable(target_message=message)
+                return
+        except DashboardWorksheetNotFoundError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "worksheet_lookup",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+        except DashboardPdfDownloadError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "pdf_download",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+        except DashboardPdfWriteError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "pdf_write",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+        except DashboardConversionError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "jpeg_convert",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+        except DashboardExportError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "export",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+        except Exception as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "unexpected",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
+
+        self._logging_service.info(
+            event=LogEvent.dashboard_export_succeeded,
+            component="telegram_polling_handler",
+            context=LogContext(
+                trace_id=trace_id,
+                chat_id=chat_id,
+                user_id=user_id,
+                message_id=message_id,
+                processing_path="online",
+                status="SENT",
+            ),
+            payload={
+                **log_payload,
+                "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "archive_dir": str(artifact.archive_dir),
+                "pdf_file_name": artifact.pdf_file_name,
+                "image_file_name": artifact.image_file_name,
+            },
+        )
+
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         del update
         self._logging_service.error(
@@ -512,7 +780,11 @@ class TelegramPollingHandler:
                 status="FAILED",
             ),
             payload={
-                "error_type": type(context.error).__name__ if context.error is not None else "UnknownError",
+                "error_type": (
+                    type(context.error).__name__
+                    if context.error is not None
+                    else "UnknownError"
+                ),
                 "error_message": str(context.error),
             },
         )

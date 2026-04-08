@@ -105,6 +105,9 @@ class GoogleSheetsSettings:
     service_account_file: Path
     spreadsheet_id: str
     worksheet_name: str
+    dashboard_worksheet_name: str
+    dashboard_export_range: str
+    dashboard_archive_dir: Path
 
 
 @dataclass(frozen=True)
@@ -192,9 +195,13 @@ def load_settings() -> Settings:
         ),
         dictionaries=DictionarySettings(
             directory=dictionaries_dir,
-            work_types_file=Path(_get_env("WORK_TYPES_FILE", str(dictionaries_dir / "work_types.txt"))),
+            work_types_file=Path(
+                _get_env("WORK_TYPES_FILE", str(dictionaries_dir / "work_types.txt"))
+            ),
             stages_file=Path(_get_env("STAGES_FILE", str(dictionaries_dir / "stages.txt"))),
-            functions_file=Path(_get_env("FUNCTIONS_FILE", str(dictionaries_dir / "functions.txt"))),
+            functions_file=Path(
+                _get_env("FUNCTIONS_FILE", str(dictionaries_dir / "functions.txt"))
+            ),
             units_file=Path(_get_env("UNITS_FILE", str(dictionaries_dir / "units.txt"))),
         ),
         google_sheets=GoogleSheetsSettings(
@@ -203,6 +210,20 @@ def load_settings() -> Settings:
             ),
             spreadsheet_id=_get_env("GOOGLE_SHEETS_SPREADSHEET_ID", ""),
             worksheet_name=_get_env("GOOGLE_SHEETS_WORKSHEET_NAME", "data_facts"),
+            dashboard_worksheet_name=_get_env(
+                "GOOGLE_SHEETS_DASHBOARD_WORKSHEET_NAME",
+                "dashboard_visual",
+            ),
+            dashboard_export_range=_get_env(
+                "GOOGLE_SHEETS_DASHBOARD_EXPORT_RANGE",
+                "A1:X38",
+            ),
+            dashboard_archive_dir=Path(
+                _get_env(
+                    "GOOGLE_SHEETS_DASHBOARD_ARCHIVE_DIR",
+                    "var/dashboard_exports",
+                )
+            ),
         ),
         queue=QueueSettings(
             db_path=Path(_get_env("QUEUE_DB_PATH", "var/queue/queue.sqlite3")),

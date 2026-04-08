@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from observability.correlation_id_factory import CorrelationIdFactory
-from observability.log_context import LogContext
-from observability.log_events import LogEvent
-from observability.logging_service import LoggingService
+from pathlib import Path
+
 from telegram import (
     Bot,
     InlineKeyboardMarkup,
@@ -11,6 +9,11 @@ from telegram import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
+
+from observability.correlation_id_factory import CorrelationIdFactory
+from observability.log_context import LogContext
+from observability.log_events import LogEvent
+from observability.logging_service import LoggingService
 
 
 class NotificationService:
@@ -42,10 +45,10 @@ class NotificationService:
     ) -> None:
         self._logging_service = logging_service
         self._correlation_id_factory = correlation_id_factory
-        self._welcome_text = "Select an action.\nNext: choose Report Progress or Help."
         self._help_text = (
-            "Use Report Progress to send one message.\n"
-            "Next: tap Report Progress."
+            "Use Report Progress to send one fact.\n"
+            "Use Dashboard to receive the latest dashboard preview.\n"
+            "Next: tap Report Progress or Dashboard."
         )
         self._input_instruction_text = (
             "Send one progress fact in a single message ⌨️\n"
@@ -54,6 +57,10 @@ class NotificationService:
         self._example_text = (
             "Example: Poured 20 m3 of concrete in gridlines 3-5.\n"
             "Next: send your own report."
+        )
+        self._welcome_text = (
+            "Select an action.\n"
+            "Next: choose Report Progress, Dashboard, or Help."
         )
 
     async def send_welcome(
@@ -134,6 +141,30 @@ class NotificationService:
 
     async def send_processing_error(self, *, target_message: Message) -> None:
         await target_message.reply_text("Could not process. Try again.")
+
+    async def send_dashboard_preparing(self, *, target_message: Message) -> None:
+        await target_message.reply_text("Preparing dashboard preview...")
+
+    async def send_dashboard_unavailable(self, *, target_message: Message) -> None:
+        await target_message.reply_text("Could not prepare the dashboard preview. Try again.")
+
+    async def send_dashboard_preview(
+        self,
+        *,
+        target_message: Message,
+        image_path: Path,
+        worksheet_name: str,
+        export_range: str,
+    ) -> None:
+        with image_path.open("rb") as image_stream:
+            await target_message.reply_photo(
+                photo=image_stream,
+                caption=(
+                    f"Dashboard preview.\n"
+                    f"Sheet: {worksheet_name}\n"
+                    f"Range: {export_range}"
+                ),
+            )
 
     async def send_queued_notice(self, *, target_message: Message) -> None:
         await target_message.reply_text("Queued. I'll send a confirmation card when ready.")

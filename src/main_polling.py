@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from telegram.ext import Application, ApplicationBuilder
+
 from application.classification_orchestrator import ClassificationOrchestrator
 from application.fallback_mapper import FallbackMapper
 from application.json_schema_validator import JsonSchemaValidator
@@ -8,7 +11,7 @@ from application.message_preprocessor import MessagePreprocessor
 from application.prompt_builder import PromptBuilder
 from application.startup_preflight import StartupPreflight
 from config.settings import Settings, load_settings
-from dotenv import load_dotenv
+from infrastructure.dashboard_sheets_exporter import DashboardSheetsExporter
 from infrastructure.dictionary_repository import DictionaryRepository
 from infrastructure.gemini_client import GeminiClient
 from infrastructure.google_sheets_repository import GoogleSheetsRepository
@@ -21,7 +24,7 @@ from observability.logging_service import LoggingService
 from observability.logging_setup import setup_logging
 from presentation.notification_service import NotificationService
 from presentation.telegram_polling_handler import TelegramPollingHandler
-from telegram.ext import Application, ApplicationBuilder
+
 
 def configure_logging(settings: Settings) -> LoggingService:
     return setup_logging(settings.logging)
@@ -50,6 +53,7 @@ def build_application(
         logging_service=logging_service,
         correlation_id_factory=correlation_id_factory,
     )
+    dashboard_exporter = DashboardSheetsExporter(settings.google_sheets)
     queue_repository = QueueRepository(settings.queue)
     pending_confirmation_repository = PendingConfirmationRepository(settings.queue)
     gemini_client = GeminiClient(
@@ -76,6 +80,7 @@ def build_application(
         notification_service=notification_service,
         message_preprocessor=message_preprocessor,
         classification_orchestrator=classification_orchestrator,
+        dashboard_exporter=dashboard_exporter,
         queue_repository=queue_repository,
         pending_confirmation_repository=pending_confirmation_repository,
         logging_service=logging_service,
