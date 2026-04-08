@@ -1,0 +1,35 @@
+Project Office
+Project Controls
+Investment & Finance
+Legal
+Contract Management
+Commercial & Cost Control
+Land & Cadastral
+Permitting & Authorities
+Utility Connections
+Design Management
+Engineering Surveys
+BIM & Digital Engineering
+Procurement
+Supply Chain & Logistics
+Construction Management
+Civil Works Management
+Structural Works Management
+MEP Management
+Finishing Works Management
+Commissioning & Handover
+QA/QC
+HSE
+Technical Supervision
+Document Control
+Sales & Marketing
+Design Consultant
+General Contractor
+Civil Subcontractor
+Structural Steel Subcontractor
+Facade Subcontractor
+MEP Subcontractor
+Equipment Supplier
+Authority Interface
+Utility Provider Interface
+Commissioning Contractor

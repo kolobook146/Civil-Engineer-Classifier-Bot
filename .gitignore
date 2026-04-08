@@ -45,3 +45,11 @@ var/queue/
 .vscode/
 .idea/
 .DS_Store
+
+# Documentation artifacts
+docs/**/~$*
+docs/**/.~lock.*#
+docs/**/tmp/
+docs/**/temp/
+docs/**/generated/
+docs/**/exports/
