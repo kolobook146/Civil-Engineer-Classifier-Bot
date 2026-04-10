@@ -26,7 +26,7 @@ The `data_facts` sheet stores confirmed progress facts reported through the bot.
 ## Business Meaning of Columns
 
 - `raw_text`: original user message.
-- `volume`: reported decimal quantity when present.
+- `volume`: reported decimal quantity when present; for non-physical pilot facts the bot may write `1` as a binary completion marker.
 - `unit`: canonical measurement unit.
 - `work_type`: optional construction scope refinement.
 - `stage`: mandatory lifecycle gate.
@@ -44,3 +44,13 @@ The `data_facts` sheet stores confirmed progress facts reported through the bot.
 
 This is the operational evidence register of reported progress.
 It supports audit, later re-interpretation, analytics, and future schedule linkage.
+
+## Current Pilot Fact Convention
+
+For the current workbook pilot:
+
+- physical rows continue to use measured `volume`;
+- non-physical rows may use `volume = 1`;
+- `timestamp` remains the persisted fact time and is used by the workbook as the source of:
+  - earliest matching fact date for `Actual Start`;
+  - latest matching fact date for `Actual Finish` once the row is complete.

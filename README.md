@@ -18,22 +18,23 @@ Build a pilot system that:
 - accepts user messages about completed work in free-form text;
 - extracts structured fields based on project dictionaries;
 - stores both structured data and the original message text;
-- notifies the user either immediately or post-factum (if the message is queued).
+- asks the user for confirmation before writing to Google Sheets, including post-factum after queued processing.
 
 ## 2. Pilot Scope
 
 In scope for the pilot:
 - Telegram `polling` by default, plus an optional built-in `webhook` mode for local development via `ngrok`;
-- LLM classification using Google Gemini (`gemini-2.5-flash`) via the native `google-genai` SDK with a 30-second timeout;
+- LLM classification using Google Gemini (`gemini-3.1-flash-lite-preview`) via the native `google-genai` SDK with a 30-second timeout;
 - strict JSON validation of the LLM output before persistence;
 - fallback logic for invalid JSON;
-- writing data to Google Sheets (`data_facts`);
+- writing data to Google Sheets (`data_facts`) only after explicit user confirmation;
+- a deferred-processing queue with bounded retry/backoff (`1/5/15 minutes` with jitter);
 - on-demand dashboard export from `dashboard_visual!A1:X38` to a local archive (`PDF + JPEG`) with JPEG delivery to Telegram;
-- a deferred-processing queue with post-factum user notification.
+- post-factum confirmation cards for queued messages.
 
 Out of scope for the pilot (post-pilot):
 - idempotent writes by unique message key;
-- retry policy (1/5/15 minutes) and DLQ;
+- DLQ / parking flow for non-recoverable queue tasks;
 - logging of confidence values and reasons for empty fields;
 - operational monitoring (timeouts, queue size, persistence errors);
 - dictionary schema expansion to `code`, `label`, `description` (currently only `label` is used).
@@ -73,8 +74,8 @@ The LLM must return JSON with the following fields:
 - `volume` (optional, decimal `number`);
 - `unit` (optional, one dictionary value or `null`);
 - `workType` (one dictionary value or `null`);
-- `stage` (one dictionary value or `null`);
-- `function` (one dictionary value or `null`);
+- `stage` (required, exactly one dictionary value, not `null`);
+- `function` (required, exactly one dictionary value, not `null`);
 - `comment` (unmapped/free text or `null`).
 
 ### 3.4 Validation and Fallback
@@ -83,6 +84,7 @@ The LLM must return JSON with the following fields:
 2. If JSON is valid:
    - a record is created with status `PROCESSED`.
 3. If JSON is invalid:
+   - invalid includes schema violations such as missing or `null` `stage` / `function`;
    - the full LLM output is stored in `comment`;
    - the record is marked as `PROCESSED_WITH_FALLBACK`.
 
@@ -99,16 +101,18 @@ Data is written to the `data_facts` sheet and always includes:
   - `model`,
   - `classifier_version`,
   - `status`.
+- Online and queued records are written only after explicit user confirmation.
 
 ### 3.6 Queue and Deferred Processing
 
 If the LLM does not respond within 30 seconds:
 1. The message is queued with status `QUEUED`.
 2. The user is notified that the message is queued.
-3. A queue worker processes the message later via the same pipeline:
-   - LLM -> validation -> fallback (if needed) -> write to `data_facts`.
-4. After successful persistence, the user receives a post-factum notification:
-   - `Queued message has been recorded`.
+3. A queue worker processes the message later via the same classification pipeline:
+   - LLM -> normalization -> schema validation -> fallback (if needed).
+4. After successful queued classification, the user receives a post-factum confirmation card.
+5. Google Sheets write happens only after the user explicitly confirms that card.
+6. If queued processing fails, the task is retried with bounded backoff (`1/5/15 minutes` with jitter).
 
 ### 3.7 Dashboard Preview Export
 
@@ -134,6 +138,7 @@ If the LLM does not respond within 30 seconds:
 - Messages must not be lost when LLM timeouts occur.
 - `raw_text` must always be persisted, even with partial or failed parsing.
 - The queue must guarantee eventual processing of deferred messages.
+- Queued tasks must retry with bounded backoff instead of hot-looping on transient failures.
 
 ### 4.2 Performance
 
@@ -143,7 +148,8 @@ If the LLM does not respond within 30 seconds:
 ### 4.3 Data Quality
 
 - Strict JSON validation before persistence.
-- `unit`, `workType`, `stage`, and `function` must be single-value (`one value or null`) and must belong to their dictionaries.
+- `unit` and `workType` must be single-value (`one value or null`) and must belong to their dictionaries.
+- `stage` and `function` must be single-value, non-null, and must belong to their dictionaries.
 
 ### 4.4 Maintainability
 
@@ -173,7 +179,7 @@ If the LLM does not respond within 30 seconds:
 - Client: Telegram (iOS, Android, Desktop, Web).
 - Backend: Python service (Linux/macOS).
 - Storage integration: Google Sheets API.
-- LLM provider: Google Gemini API (`gemini-2.5-flash`) via native `google-genai` SDK.
+- LLM provider: Google Gemini API (`gemini-3.1-flash-lite-preview`) via native `google-genai` SDK.
 - Reporting preview: Google Sheets PDF export + local JPEG conversion (`sips`) for Telegram photo delivery.
 
 ## 7. Pilot Constraints
@@ -206,12 +212,12 @@ If the LLM does not respond within 30 seconds:
 
 ## 10. Pilot Acceptance Criteria
 
-1. A user free-form message is persisted to `data_facts`.
+1. A user free-form message results in a confirmation card and is persisted to `data_facts` only after explicit confirmation.
 2. `raw_text` is always present in `data_facts`.
-3. With valid JSON, fields are correctly populated according to the schema.
+3. With valid JSON, fields are correctly populated according to the schema, including non-null `stage` and `function`.
 4. With invalid JSON, raw LLM output is written to `comment`.
-5. On a 30-second timeout, the message is queued and later processed.
-6. After queue processing, the user receives a post-factum notification.
+5. On a 30-second timeout, the message is queued and later processed with bounded retry/backoff.
+6. After queue processing, the user receives a post-factum confirmation card before any Google Sheets write.
 7. On `Dashboard`, the user receives a JPEG preview of `dashboard_visual!A1:X38`.
 
 ## 11. Run Process

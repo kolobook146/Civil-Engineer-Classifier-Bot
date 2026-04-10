@@ -26,7 +26,7 @@ At the Stage 22 pilot stage:
 - facts are persisted to `data_facts`;
 - the schedule is maintained as a separate model;
 - there is still no exact row-level automatic mutation from a new fact;
-- however, open quantity-driven rows in `schedule_current` may consume aggregated quantity through a formula branch.
+- however, selected rows in `schedule_current` may consume aggregated quantity through a formula branch.
 
 This remains intentional.
 The project first needs reliable evidence and reliable schedule structure before introducing exact row-level automation.
@@ -61,10 +61,10 @@ This order is intentionally conservative.
 
 ## Formula-Fed Pilot Branch
 
-The implemented pilot also accepts one intentionally weaker bridge for open quantity-driven rows in `schedule_current`.
+The implemented pilot accepts one intentionally weaker bridge for assigned open rows in `schedule_current`.
 
-That branch does not try to prove an exact row-level match.
-Instead it aggregates `Actual Quantity` from `data_facts` by the shared operational coordinate:
+That branch does not try to prove an exact row-level match from the fact itself.
+Instead it first chooses one project clone per template row through `fact_collection_map`, then aggregates `Actual Quantity` from `data_facts` by the shared operational coordinate:
 
 - `stage`
 - `function`
@@ -76,7 +76,9 @@ This means:
 - `Task ID` is not used in that formula branch;
 - `External Ref` is not used in that formula branch;
 - time-window logic is not used in that formula branch;
-- if several schedule rows share the same four-field coordinate, the same summed quantity may appear in all of them.
+- only the assigned project clone is allowed to collect the summed fact quantity for a given template row;
+- rows with `Planned Finish < 2026-04-08` keep historical fixed semantics instead of live formula collection;
+- non-physical rows may also use the branch when the bot writes `volume = 1`.
 
 This is an accepted pilot limitation.
 It is suitable for the current pilot because it is simple, transparent, and reversible, but it is not a strong mature-state matching model.
@@ -111,8 +113,9 @@ It is suitable for the current pilot because it is simple, transparent, and reve
 - A fact must never silently disappear because no match was found.
 - A low-confidence match must become a review case, not a hidden update.
 - The schedule may consume evidence, but the original fact record must remain preserved.
-- The formula-fed quantity bridge may duplicate the same fact sum across multiple schedule rows that share the same coordinate.
-- The formula-fed quantity bridge is allowed only for open quantity-driven rows in `schedule_current`.
+- The formula-fed quantity bridge is allowed only for rows whose project clone matches the template assignment in `fact_collection_map`.
+- The formula-fed quantity bridge still relies only on `Stage + Function + Work Type + Unit`, so it remains weaker than a mature row-identity model.
+- For non-physical rows, the pilot treats bot-written `volume = 1` as a binary completion signal.
 
 ## Stage 22 Result
 
@@ -121,4 +124,4 @@ Stage 22 formalizes a controlled bridge:
 - facts stay immutable evidence;
 - the schedule stays a governed structure;
 - exact mapping remains a deliberate business layer rather than an implicit side effect;
-- a narrow formula-fed quantity branch is allowed as a pilot compromise for `schedule_current`.
+- a narrow one-project formula-fed quantity branch is allowed as a pilot compromise for `schedule_current`.

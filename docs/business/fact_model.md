@@ -62,6 +62,23 @@ The current pilot persists the following fields in `data_facts`:
 This is the current evidence-sheet representation.
 It remains valid in Stage 22.
 
+## Current Pilot Bot Convention
+
+The current pilot also accepts one explicit bot convention for non-physical schedule items:
+
+- when the bot reports completion evidence for a non-physical row, it writes `volume = 1`;
+- the fact still keeps the same core coordinate:
+  - `function`
+  - `stage`
+  - optional `work_type`
+  - `unit`, including the accepted blank-unit case;
+- this lets non-physical rows participate in the same formula-fed `Actual Quantity` bridge as physical rows.
+
+Under this convention:
+
+- `volume = 1` is not a physical quantity;
+- it is a binary completion marker for the current pilot only.
+
 ## Recommended Business Interpretation of Facts
 
 Stage 22 interprets persisted facts as belonging to one of these business families:
@@ -146,3 +163,14 @@ It does not yet require:
 - a full PMIS-style event engine.
 
 Those are later extensions, not prerequisites of the Stage 22 business model.
+
+The current pilot also does not require:
+
+- a separate completion-flag column;
+- a dedicated fact-to-task identity field;
+- a full event-type taxonomy inside `data_facts`.
+
+Instead, the current workbook may derive:
+
+- `Actual Start` from the earliest matching fact date;
+- `Actual Finish` from the latest matching fact date once the completion rule is met.

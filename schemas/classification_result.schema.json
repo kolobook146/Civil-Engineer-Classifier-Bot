@@ -22,16 +22,10 @@
       ]
     },
     "stage": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "function": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "comment": {
       "type": [

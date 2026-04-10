@@ -46,6 +46,7 @@ This folder contains the research corpus for broad, non-filtered investigation o
 | Stage 21 | Completed (first deep pass) | Target-model draft assembled from comparative synthesis and the Stage 20 package, including decision-to-evidence traceability. |
 | Stage 22 | Completed (first formalization pass) | Stage 21 target-model decisions formalized into `docs/business/*` normative project documentation. |
 | Stage 23 | Completed (first deep pass) | Heavy extension systems profiled: PMIS, EDMS / CDE, permit / authority, smart-site, resource optimization, and payment / commercial engines. |
+| Stage 24 | Completed (first deep pass) | Reporting and dashboard practice researched across CIS, EU, USA, China, and Middle East, with a dedicated comparison matrix and compact package supplement. |
 | Post-Stage-23 follow-up | Pending | Implementation alignment, validation design, and evidence-based promotion criteria remain for later passes. |
 
 ## Working Conventions
@@ -62,3 +63,4 @@ This folder contains the research corpus for broad, non-filtered investigation o
 - Align sheet implementation and bot-side behavior with the Stage 22 business documentation.
 - Turn the Stage 22 rule catalog into concrete validation and migration logic.
 - Define promotion triggers for Stage 23 extension families only where pilot evidence proves the generic bridge insufficient.
+- Use Stage 24 reporting findings to decide which executive, controls-pack, and exception-layer practices deserve promotion into the pilot dashboard model.

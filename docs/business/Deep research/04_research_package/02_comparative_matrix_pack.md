@@ -12,6 +12,7 @@ This document assembles the comparative matrices that should be used together in
 | Institute matrix | What do the major methodological systems emphasize? | `../02_registries/comparative_matrix_by_institute.md` |
 | Academic matrix | How are future engineers and managers taught to formalize schedules? | `../02_registries/comparative_matrix_by_academic_layer.md` |
 | Enterprise matrix | How do owners, PMOs, EPCs, and consultants operationalize schedule governance? | `../02_registries/comparative_matrix_by_enterprise_practice.md` |
+| Reporting-practice matrix | How do major organizations package controls, dashboards, and reporting cadence? | `../02_registries/comparative_matrix_by_reporting_practice.md` |
 | Global software matrix | How do leading products represent schedule structure and governance? | `../02_registries/comparative_matrix_by_software.md` |
 | Asia software matrix | How do China and wider Asia products differ from the global enterprise software layer? | `../02_registries/comparative_matrix_by_software_asia.md` |
 | Stage 19 synthesis matrix | What is universal, regional, layer-specific, and structurally divergent across the whole corpus? | `../02_registries/comparative_synthesis_matrix_stage_19.md` |
@@ -42,6 +43,15 @@ Software matrices are strongest when the question is:
 - which family the product supports best;
 - where documentation confidence is strong or weak.
 
+### 5. Use the reporting-practice matrix when the question is about dashboards and packs
+
+Use `comparative_matrix_by_reporting_practice.md` when the question is:
+
+- which reporting container should sit above the schedule system;
+- how executive dashboards differ from monthly controls packs;
+- which KPI families recur across regions;
+- where pilot dashboard design should borrow from enterprise practice and where it should stop.
+
 ## Highest-Value Matrix Reading Paths
 
 ### For target-model drafting
@@ -50,6 +60,7 @@ Software matrices are strongest when the question is:
 2. `comparative_matrix_by_region.md`
 3. `comparative_matrix_by_enterprise_practice.md`
 4. `comparative_matrix_by_software.md`
+5. `comparative_matrix_by_reporting_practice.md`
 
 ### For academic and ontology work
 

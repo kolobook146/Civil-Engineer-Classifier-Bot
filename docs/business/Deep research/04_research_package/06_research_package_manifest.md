@@ -13,6 +13,7 @@ This manifest maps the Stage 20 assembled package to the authoritative research 
 | Catalog pack | Navigation across ontology and process catalogs | `03_catalog_pack.md` | entity, property, coding, process, and emergent registries |
 | Software report pack | Navigation across software-specific findings | `04_software_report_pack.md` | software matrices and software narrative reports |
 | Source register pack | Navigation across the evidence base | `05_source_register_pack.md` | `../02_registries/source_registry.md` |
+| Reporting and dashboard pack | Navigation across Stage 24 reporting findings | `07_reporting_and_dashboard_pack.md` | `../03_reports/24_reporting_and_dashboard_practice_report.md`, `../02_registries/comparative_matrix_by_reporting_practice.md`, `../02_registries/source_registry.md` |
 | Research package README | Entry point and reading order | `README.md` | this folder |
 
 ## Stage 20 Output Mapping to Original Research Plan
@@ -24,6 +25,7 @@ This manifest maps the Stage 20 assembled package to the authoritative research 
 | Entity / property / coding catalogs | `03_catalog_pack.md` plus authoritative registries |
 | Software report | `04_software_report_pack.md` plus Stage 15 reports |
 | Source register | `05_source_register_pack.md` plus the authoritative source registry |
+| Reporting and dashboard supplement | `07_reporting_and_dashboard_pack.md` plus Stage 24 report and reporting-practice matrix |
 
 ## Package Status
 
@@ -33,6 +35,7 @@ This manifest maps the Stage 20 assembled package to the authoritative research 
 - Catalog layer: assembled
 - Software layer: assembled
 - Source layer: assembled
+- Reporting layer supplement: assembled
 
 ## Intended Next Use
 

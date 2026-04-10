@@ -17,6 +17,7 @@ It organizes them.
 - `04_software_report_pack.md`: guide to global and Asia software findings.
 - `05_source_register_pack.md`: guide to the source base and source hierarchy.
 - `06_research_package_manifest.md`: consolidated manifest of the assembled package.
+- `07_reporting_and_dashboard_pack.md`: Stage 24 supplement for reporting and dashboard practice.
 
 ## Recommended Reading Order
 
@@ -26,6 +27,7 @@ It organizes them.
 4. `04_software_report_pack.md`
 5. `05_source_register_pack.md`
 6. `06_research_package_manifest.md`
+7. `07_reporting_and_dashboard_pack.md`
 
 ## Working Rule
 

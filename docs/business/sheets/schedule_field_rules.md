@@ -154,8 +154,8 @@ Dependency rules:
 | `Forecast Start` | date | `YYYY-MM-DD` | Conditional | Calculated | If `Actual Start` filled -> `Actual Start`; else if no predecessors -> `Planned Start`; else latest predecessor finish with offset rule. |
 | `Forecast Finish` | date | `YYYY-MM-DD` | Conditional | Manual or calculated | `Actual Finish` if `done`; `Forecast Start` for open zero-day rows; quantity-driven: `Forecast Start + Remaining Duration - 1`; non-quantity-driven open rows: manual. |
 | `Remaining Duration` | non-negative integer | Calendar days | Conditional | Calculated | `0` if `done`; `0` for open zero-day rows; quantity-driven: `MAX(0, ROUNDUP((Planned Quantity - Actual Quantity) / Planned Intensity, 0))`; otherwise derived from manual `Forecast Finish`. |
-| `Actual Start` | date | `YYYY-MM-DD` | Conditional | Manual | `schedule_current`: historical rows closed by the `2026-04-08` pilot backfill may use `Planned Start`; open rows remain bot-maintained. |
-| `Actual Finish` | date | `YYYY-MM-DD` | Conditional | Manual | `schedule_current`: historical rows closed by the `2026-04-08` pilot backfill may use `Planned Finish`; open rows remain bot-maintained. |
+| `Actual Start` | date | `YYYY-MM-DD` | Conditional | Manual or calculated | `schedule_current`: rows with `Planned Finish < 2026-04-08` keep the accepted historical backfill semantics and may use `Planned Start`; later assigned rows may use the earliest matching fact date from `data_facts`. |
+| `Actual Finish` | date | `YYYY-MM-DD` | Conditional | Manual or calculated | `schedule_current`: rows with `Planned Finish < 2026-04-08` keep the accepted historical backfill semantics and may use `Planned Finish`; later assigned rows stay blank until the completion rule is met, then may use the latest matching fact date from `data_facts`. |
 | `Actual Duration` | non-negative integer | Calendar days | No | Calculated | Blank if not `done`; `0` for completed zero-day row; otherwise `Actual Finish - Actual Start + 1`. |
 
 #### Predecessor Offset Rule
@@ -179,13 +179,13 @@ For open non-quantity-driven rows:
 | Field | Type | Allowed values / source | Required | Entry mode | Rule / Formula |
 | --- | --- | --- | --- | --- | --- |
 | `Status` | enum text | `statuses.txt` | Conditional | Manual or calculated | `schedule_baseline`: derived from `Percent Complete`. `schedule_current`: derived from `Percent Complete` when it is filled, otherwise blank. Blank on `wbs` rows. |
-| `Percent Complete` | decimal 0-100 | Numeric percent | No | Manual or calculated | `schedule_baseline`: calculated from `Status Date`. `schedule_current`: historical rows closed by the `2026-04-08` backfill use static `100`; open quantity-driven rows use `MIN(100, ROUND(Actual Quantity / Planned Quantity * 100, 1))`; open non-quantity rows remain bot-maintained. Blank on `wbs` rows. |
+| `Percent Complete` | decimal 0-100 | Numeric percent | No | Manual or calculated | `schedule_baseline`: calculated from `Status Date`. `schedule_current`: rows with `Planned Finish < 2026-04-08` use `100`; later physical rows use `MIN(100, ROUND(Actual Quantity / Planned Quantity * 100, 1))`; later non-physical rows use binary logic `100` when `Actual Quantity >= 1`, otherwise `0`. Blank on `wbs` rows. |
 | `Planned Quantity` | non-negative decimal | Numeric | No | Manual | Required for quantity-driven rows. |
-| `Actual Quantity` | non-negative decimal | Numeric | No | Manual or calculated | `schedule_current`: historical quantity-driven rows closed by the `2026-04-08` backfill use `Planned Quantity`; open quantity-driven rows use `SUMIFS(data_facts.volume; data_facts.stage; Stage; data_facts.function; Function; data_facts.work_type; Work Type; data_facts.unit; Unit)`. Non-quantity rows stay blank. |
+| `Actual Quantity` | non-negative decimal | Numeric | No | Manual or calculated | `schedule_current`: rows with `Planned Finish < 2026-04-08` preserve historical backfill semantics; later rows in the assigned project use `SUMIFS(data_facts.volume; data_facts.stage; Stage; data_facts.function; Function; data_facts.work_type; Work Type; data_facts.unit; Unit)`. For non-physical rows the bot writes `volume = 1`, so the summed quantity becomes a binary completion counter. Non-assigned open clones stay blank. |
 | `Unit` | controlled text | `units.txt` | Conditional | Manual | Required when quantity fields are used. |
 | `Planned Intensity` | positive decimal | `Unit/day` | Conditional | Manual or calculated | In baseline enrichment it may be derived as `Planned Quantity / Planned Duration`; otherwise it is maintained explicitly for quantity-driven rows. |
 | `Planned Cost` | non-negative decimal | Workbook currency | No | Manual | Planned cost in `Cost Currency`, assigned using `docs/business/dictionaries/planned_cost_reference.md`. Blank on `wbs` rows in the pilot. |
-| `Actual Cost` | non-negative decimal | Workbook currency | No | Manual or calculated | `schedule_current`: quantity-driven rows use `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)`; historical non-quantity rows closed by the `2026-04-08` backfill may use `Planned Cost`; open non-quantity rows may stay blank until bot enrichment. |
+| `Actual Cost` | non-negative decimal | Workbook currency | No | Manual or calculated | `schedule_current`: physical quantity-managed rows use `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)`; rows with `Planned Finish < 2026-04-08` may resolve to the accepted historical backfill value; open non-physical rows stay blank in this change set. |
 
 #### Baseline Planned Statusing
 
@@ -219,8 +219,8 @@ In the pilot, `wbs` rows stay blank for:
 For `schedule_current`, the accepted pilot logic is:
 
 - no `TODAY()`-based actual formulas;
-- a one-time manual historical backfill is applied as of `2026-04-08`;
-- for every non-`wbs` row with `Planned Finish < 2026-04-08`:
+- the historical snapshot date is fixed at `2026-04-08`;
+- rows with `Planned Finish < 2026-04-08` preserve the accepted historical backfill semantics:
   - `Status = done`
   - `Percent Complete = 100`
   - `Actual Start = Planned Start`
@@ -228,14 +228,24 @@ For `schedule_current`, the accepted pilot logic is:
   - `Forecast Start = Planned Start`
   - `Forecast Finish = Planned Finish`
   - `Remaining Duration = 0`
-- for historical quantity-driven rows:
-  - `Actual Quantity = Planned Quantity`
-  - `Actual Cost` may stay on the standard quantity-driven formula and therefore resolve to `Planned Cost`
-- for historical non-quantity rows:
-  - `Actual Quantity` stays blank
-  - `Actual Cost = Planned Cost`
+- quantity-managed historical rows resolve `Actual Quantity = Planned Quantity`;
+- non-quantity historical rows keep `Actual Quantity` blank and may resolve `Actual Cost = Planned Cost`.
 
-For open quantity-driven rows in `schedule_current`:
+For later open rows in `schedule_current`:
+
+- fact collection is restricted by a hidden helper sheet `fact_collection_map`;
+- every one of the 152 template rows is assigned to at most one project `P01-P07` for formula-fed fact collection;
+- the assignment anchor date is `2026-04-01`;
+- preferred project choice is the closest clone start on or after the anchor date;
+- if no clone starts on or after the anchor date, the fallback is the closest earlier clone;
+- within one shared match key, the same project cannot be assigned twice unless all seven project slots are already exhausted;
+- the shared match key is:
+  - `Stage`
+  - `Function`
+  - `Work Type`
+  - `Unit`
+
+For later assigned rows in `schedule_current`:
 
 - `Actual Quantity` is aggregated directly from `data_facts` by:
   - `Stage`
@@ -243,14 +253,22 @@ For open quantity-driven rows in `schedule_current`:
   - `Work Type`
   - `Unit`
 - `Task ID` and `External Ref` are not used in this formula branch;
-- if several schedule rows share the same four-field coordinate, the same summed fact quantity may appear in all of them;
-- this is an accepted pilot limitation, not the target mature-state matching logic.
+- `Actual Start` uses the earliest matching fact date;
+- `Actual Finish` stays blank until completion is proven, then uses the latest matching fact date;
+- physical completion is reached when `Actual Quantity >= Planned Quantity`;
+- non-physical completion is reached when `Actual Quantity >= 1`.
 
-For open non-quantity rows in `schedule_current`:
+For later non-assigned clones:
 
-- `Actual Start` remains bot-maintained;
-- `Actual Finish` remains bot-maintained;
-- `Percent Complete` remains bot-maintained.
+- `Actual Quantity` stays blank;
+- `Actual Start` stays blank;
+- `Actual Finish` stays blank;
+- `Percent Complete = 0`.
+
+For later non-physical facts:
+
+- the bot writes `volume = 1`;
+- `Actual Quantity` therefore becomes a binary completion counter in the assigned row.
 
 Derived `Status` in `schedule_current` follows:
 

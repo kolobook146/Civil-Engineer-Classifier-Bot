@@ -189,7 +189,7 @@ def load_settings() -> Settings:
         llm=LLMSettings(
             base_url=_get_env("LLM_BASE_URL", ""),
             api_key=_get_env("LLM_API_KEY", ""),
-            model=_get_env("LLM_MODEL", "gemini-2.5-flash"),
+            model=_get_env("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
             timeout_seconds=_get_int_env("LLM_TIMEOUT_SECONDS", 30),
             preflight_enabled=_get_bool_env("LLM_PREFLIGHT_ENABLED", True),
         ),

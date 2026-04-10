@@ -26,7 +26,7 @@ Assumed `schedule_baseline` `Status Date` in the examples:
 | `schedule_baseline` | `T10960` | `Install facade insulation` | `activity` |  | `production` | `Construction Execution` | `Execution` | `Facade works` | `07 Parallel fit-out, systems, closeout` | `P01.07.14` | `P01-FACADE` | `P01-ENVELOPE` | `Facade Subcontractor` | `2026-03-10` | `2026-05-15` | `67` | `2026-03-10` | `2026-05-15` | `67` |  |  | `in_progress` | `43.3` | `9800` |  | `m2` | `146.3` | `294000` |  |
 | `schedule_baseline` | `T20960` | `Install facade insulation` | `activity` |  | `production` | `Construction Execution` | `Execution` | `Facade works` | `07 Parallel fit-out, systems, closeout` | `P02.07.14` | `P02-FACADE` | `P02-ENVELOPE` | `Facade Subcontractor` | `2026-09-30` | `2026-12-05` | `67` | `2026-09-30` | `2026-12-05` | `67` |  |  | `not_started` | `0` | `9800` |  | `m2` | `146.3` | `294000` |  |
 | `schedule_current` | `T10750` | `Place structural concrete` | `activity` |  | `production` | `Construction Execution` | `Execution` | `Concreting` | `06 Structural shell execution` | `P01.06.19` | `P01-CONC` | `P01-STRUCTURE` | `Structural Works Management` | `2025-10-29` | `2026-01-31` | `95` | `2025-10-29` | `2026-01-31` | `0` | `2025-10-29` | `2026-01-31` | `done` | `100` | `24500` | `24500` | `m3` | `257.9` | `3552500` | `3552500` |
-| `schedule_current` | `T10960` | `Install facade insulation` | `activity` |  | `production` | `Construction Execution` | `Execution` | `Facade works` | `07 Parallel fit-out, systems, closeout` | `P01.07.14` | `P01-FACADE` | `P01-ENVELOPE` | `Facade Subcontractor` | `2026-03-10` | `2026-05-15` | `67` | `2026-03-10` | `2026-05-15` | `67` |  |  | `not_started` | `0` | `13200` | `0` from formula-fed `SUMIFS` when no matching facts exist yet | `m2` | `197.0` | `396000` | `0` from `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)` |
+| `schedule_current` | `T10960` | `Install facade insulation` | `activity` |  | `production` | `Construction Execution` | `Execution` | `Facade works` | `07 Parallel fit-out, systems, closeout` | `P01.07.14` | `P01-FACADE` | `P01-ENVELOPE` | `Facade Subcontractor` | `2026-03-10` | `2026-05-15` | `67` | `2026-03-10` | `2026-05-15` | `67` | blank until first matching fact | blank until completion rule is met | `not_started` | `0` | `13200` | formula-fed from `data_facts` only if `P01` is the assigned collection project for this template row | `m2` | `197.0` | `396000` | formula-fed `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)` |
 
 ## Reading Notes
 
@@ -41,10 +41,12 @@ Assumed `schedule_baseline` `Status Date` in the examples:
 - `Forecast Start`, `Forecast Finish`, and `Remaining Duration` represent open-row control logic.
 - `Actual Start`, `Actual Finish`, and `Actual Duration` remain factual.
 - In `schedule_current`, a one-time historical backfill is accepted as of `2026-04-08`.
-- In `schedule_current`, open quantity-driven `Actual Quantity` may be fed by a direct `SUMIFS` bridge from `data_facts`.
-- In that pilot bridge, the same fact sum may appear in multiple rows when `Stage + Function + Work Type + Unit` is identical.
+- In `schedule_current`, assigned open rows may be fed by a direct `SUMIFS` bridge from `data_facts`.
+- In that pilot bridge, each of the 152 template rows is assigned to at most one project clone for formula-fed collection.
+- For non-physical assigned rows, the bot may write `volume = 1`, so `Actual Quantity` acts as a binary completion signal.
 - In `schedule_current`, quantity-driven `Actual Cost` may use the proportional pilot formula `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)`.
-- In `schedule_current`, open non-quantity `Actual Start`, `Actual Finish`, and `Percent Complete` remain bot-maintained.
+- In `schedule_current`, assigned open rows may derive `Actual Start` from the earliest matching fact date.
+- In `schedule_current`, assigned open rows derive `Actual Finish` only when the completion rule is met.
 - `Responsible` uses a controlled responsibility bucket rather than a person name.
 - `Planned Intensity` may be derived as `Planned Quantity / Planned Duration` during baseline enrichment.
 - `Planned Cost` follows `docs/business/dictionaries/planned_cost_reference.md`.
