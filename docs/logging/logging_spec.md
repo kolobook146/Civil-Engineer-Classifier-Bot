@@ -37,6 +37,9 @@ Recommended contextual fields:
 - `queue_latency_ms`
 - `sheet_name`
 - `sheets_row_index`
+- `report_id`
+- `report_title`
+- `export_id`
 - `archive_dir`
 - `pdf_file_name`
 - `image_file_name`
@@ -62,9 +65,12 @@ Recommended contextual fields:
 | `queue_processing_failed` | ERROR | `queue_worker` | queue task processing failed |
 | `sheets_write_success` | INFO | `google_sheets_repository` | row successfully written |
 | `sheets_write_failed` | ERROR | `google_sheets_repository` | write failed |
-| `dashboard_export_requested` | INFO | `telegram_polling_handler` | user requested dashboard preview export |
-| `dashboard_export_succeeded` | INFO | `telegram_polling_handler` | dashboard JPEG preview sent to Telegram |
-| `dashboard_export_failed` | ERROR | `telegram_polling_handler` | dashboard export or delivery failed |
+| `dashboard_export_requested` | INFO | `telegram_polling_handler` | user requested report preview export |
+| `dashboard_export_succeeded` | INFO | `telegram_polling_handler` | report JPEG preview sent to Telegram |
+| `dashboard_export_failed` | ERROR | `telegram_polling_handler` | report export or JPEG delivery failed |
+| `dashboard_pdf_requested` | INFO | `telegram_polling_handler` | user requested archived report PDF |
+| `dashboard_pdf_sent` | INFO | `telegram_polling_handler` | archived report PDF sent to Telegram |
+| `dashboard_pdf_failed` | ERROR | `telegram_polling_handler` | archived report PDF lookup or delivery failed |
 | `post_factum_notification_sent` | INFO | `notification_service` | post-factum notification sent |
 | `classification_failed` | ERROR | `telegram_polling_handler` | online classification failed |
 | `telegram_update_error` | ERROR | `telegram_polling_handler` | Telegram update handler error |
@@ -92,11 +98,13 @@ Recommended contextual fields:
 
 ```json
 {"timestamp":"2026-02-13T13:00:00.120Z","level":"INFO","event":"message_received","component":"telegram_polling_handler","trace_id":"12345:678","chat_id":"12345","user_id":"55","message_id":"678","processing_path":"online","status":"RECEIVED","raw_text_length":86,"raw_text_sha256":"f8b7..."}
-{"timestamp":"2026-02-13T13:00:01.221Z","level":"INFO","event":"llm_response_received","component":"classification_orchestrator","trace_id":"12345:678","chat_id":"12345","user_id":"55","message_id":"678","processing_path":"online","status":"PROCESSING","llm_model":"gemini-3.1-flash-lite-preview","llm_latency_ms":1033}
+{"timestamp":"2026-02-13T13:00:01.221Z","level":"INFO","event":"llm_response_received","component":"classification_orchestrator","trace_id":"12345:678","chat_id":"12345","user_id":"55","message_id":"678","processing_path":"online","status":"PROCESSING","llm_model":"gemini-2.5-flash","llm_latency_ms":1033}
 {"timestamp":"2026-02-13T13:00:01.350Z","level":"INFO","event":"json_validation_passed","component":"json_schema_validator","trace_id":"12345:678","chat_id":"12345","user_id":"55","message_id":"678","processing_path":"online","status":"PROCESSED","validation_errors_count":0}
 {"timestamp":"2026-02-13T13:00:01.480Z","level":"INFO","event":"sheets_write_success","component":"google_sheets_repository","trace_id":"12345:678","chat_id":"12345","user_id":"55","message_id":"678","processing_path":"online","status":"PROCESSED","sheet_name":"data_facts","sheets_row_index":152}
-{"timestamp":"2026-04-08T09:15:22.004Z","level":"INFO","event":"dashboard_export_requested","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"REQUESTED","worksheet_name":"dashboard_visual","export_range":"A1:X38","output_format":"jpeg"}
-{"timestamp":"2026-04-08T09:15:23.841Z","level":"INFO","event":"dashboard_export_succeeded","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"SENT","worksheet_name":"dashboard_visual","export_range":"A1:X38","output_format":"jpeg","elapsed_ms":1836.72,"archive_dir":"/app/var/dashboard_exports","pdf_file_name":"dashboard_visual_A1-X38_20260408T091523Z.pdf","image_file_name":"dashboard_visual_A1-X38_20260408T091523Z.jpg"}
+{"timestamp":"2026-04-08T09:15:22.004Z","level":"INFO","event":"dashboard_export_requested","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"REQUESTED","report_id":"company_overview","report_title":"Company Overview","worksheet_name":"dashboard_visual","export_range":"A1:X32","output_format":"jpeg"}
+{"timestamp":"2026-04-08T09:15:23.841Z","level":"INFO","event":"dashboard_export_succeeded","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"SENT","report_id":"company_overview","report_title":"Company Overview","worksheet_name":"dashboard_visual","export_range":"A1:X32","output_format":"jpeg","export_id":"20260408T091523Z_abc123ef","elapsed_ms":1836.72,"archive_dir":"/app/var/dashboard_exports","pdf_file_name":"company_overview_dashboard_visual_A1-X32_20260408T091523Z_abc123ef.pdf","image_file_name":"company_overview_dashboard_visual_A1-X32_20260408T091523Z_abc123ef.jpg"}
+{"timestamp":"2026-04-08T09:15:29.010Z","level":"INFO","event":"dashboard_pdf_requested","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"REQUESTED","export_id":"20260408T091523Z_abc123ef"}
+{"timestamp":"2026-04-08T09:15:29.680Z","level":"INFO","event":"dashboard_pdf_sent","component":"telegram_polling_handler","trace_id":"12345:901","chat_id":"12345","user_id":"55","message_id":"901","processing_path":"online","status":"SENT","export_id":"20260408T091523Z_abc123ef","elapsed_ms":669.42,"archive_dir":"/app/var/dashboard_exports","pdf_file_name":"company_overview_dashboard_visual_A1-X32_20260408T091523Z_abc123ef.pdf"}
 ```
 
 ## 9. Definition of Done for Logging

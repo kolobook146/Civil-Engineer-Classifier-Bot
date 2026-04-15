@@ -28,8 +28,12 @@ from infrastructure.dashboard_sheets_exporter import (
     DashboardConversionError,
     DashboardExportArtifact,
     DashboardExportError,
+    DashboardPdfArtifact,
     DashboardPdfDownloadError,
+    DashboardPdfNotFoundError,
     DashboardPdfWriteError,
+    DashboardReportSpec,
+    DashboardReportNotFoundError,
     DashboardSheetsExporter,
     DashboardWorksheetNotFoundError,
 )
@@ -48,12 +52,15 @@ class TelegramPollingHandler:
     """Receives Telegram updates and routes them to the pilot interaction flow."""
 
     _BUTTON_REPORT = "Report Progress"
-    _BUTTON_DASHBOARD = "Dashboard"
+    _BUTTON_GET_REPORTS = "Get Reports"
+    _BUTTON_DASHBOARD_LEGACY = "Dashboard"
     _BUTTON_HELP = "Help"
     _BUTTON_MAIN_MENU = "Main Menu"
 
     _CALLBACK_REPORT = "report_execution"
     _CALLBACK_MAIN_MENU = "main_menu"
+    _CALLBACK_DASHBOARD_REPORT_PREFIX = "dashboard_report:"
+    _CALLBACK_DASHBOARD_PDF_PREFIX = "dashboard_pdf:"
     _CALLBACK_SHOW_EXAMPLE = "show_example"
     _CALLBACK_CANCEL_INPUT = "cancel_input"
     _CALLBACK_CONFIRM_PREFIX = "confirm:"
@@ -92,6 +99,18 @@ class TelegramPollingHandler:
             CallbackQueryHandler(
                 self.main_menu_callback,
                 pattern=rf"^{self._CALLBACK_MAIN_MENU}$",
+            )
+        )
+        application.add_handler(
+            CallbackQueryHandler(
+                self.dashboard_report_callback,
+                pattern=rf"^{self._CALLBACK_DASHBOARD_REPORT_PREFIX}",
+            )
+        )
+        application.add_handler(
+            CallbackQueryHandler(
+                self.dashboard_pdf_callback,
+                pattern=rf"^{self._CALLBACK_DASHBOARD_PDF_PREFIX}",
             )
         )
         application.add_handler(
@@ -138,7 +157,7 @@ class TelegramPollingHandler:
             keyboard=[
                 [
                     KeyboardButton(text=cls._BUTTON_REPORT),
-                    KeyboardButton(text=cls._BUTTON_DASHBOARD),
+                    KeyboardButton(text=cls._BUTTON_GET_REPORTS),
                 ],
                 [KeyboardButton(text=cls._BUTTON_HELP)],
             ],
@@ -180,6 +199,36 @@ class TelegramPollingHandler:
         return InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton(text="Report Another", callback_data=cls._CALLBACK_REPORT),
+                InlineKeyboardButton(text="Main Menu", callback_data=cls._CALLBACK_MAIN_MENU),
+            ]]
+        )
+
+    @classmethod
+    def _build_report_selector_keyboard(
+        cls,
+        reports: tuple[DashboardReportSpec, ...],
+    ) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        text=report.title,
+                        callback_data=f"{cls._CALLBACK_DASHBOARD_REPORT_PREFIX}{report.report_id}",
+                    )
+                ]
+                for report in reports
+            ]
+            + [[InlineKeyboardButton(text="Main Menu", callback_data=cls._CALLBACK_MAIN_MENU)]]
+        )
+
+    @classmethod
+    def _build_dashboard_pdf_keyboard(cls, export_id: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [[
+                InlineKeyboardButton(
+                    text="Get PDF",
+                    callback_data=f"{cls._CALLBACK_DASHBOARD_PDF_PREFIX}{export_id}",
+                ),
                 InlineKeyboardButton(text="Main Menu", callback_data=cls._CALLBACK_MAIN_MENU),
             ]]
         )
@@ -230,6 +279,67 @@ class TelegramPollingHandler:
         await self._notification_service.send_input_instruction(
             target_message=query.message,
             reply_markup=self._build_input_action_keyboard(),
+        )
+
+    async def dashboard_report_callback(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        del context
+        query = update.callback_query
+        if query is None:
+            return
+
+        report_id = self._extract_confirmation_id(
+            query.data,
+            self._CALLBACK_DASHBOARD_REPORT_PREFIX,
+        )
+        if report_id is None:
+            await query.answer()
+            return
+
+        try:
+            report = self._dashboard_exporter.get_report(report_id)
+        except DashboardReportNotFoundError:
+            await query.answer("This report is unavailable.")
+            return
+
+        await query.answer(f"Preparing {report.title}...")
+        if query.message is None:
+            return
+
+        await self._safe_clear_inline_markup(query)
+        await self._handle_dashboard_request(
+            update=update,
+            message=query.message,
+            report_id=report_id,
+        )
+
+    async def dashboard_pdf_callback(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        del context
+        query = update.callback_query
+        if query is None:
+            return
+
+        export_id = self._extract_confirmation_id(query.data, self._CALLBACK_DASHBOARD_PDF_PREFIX)
+        if export_id is None:
+            await query.answer()
+            return
+
+        await query.answer("Sending PDF...")
+        if query.message is None:
+            return
+
+        await self._safe_clear_inline_markup(query)
+        await self._handle_dashboard_pdf_request(
+            update=update,
+            message=query.message,
+            export_id=export_id,
         )
 
     async def show_example_callback(
@@ -283,8 +393,13 @@ class TelegramPollingHandler:
                 reply_markup=self._build_input_action_keyboard(),
             )
             return
-        if stripped_text == self._BUTTON_DASHBOARD:
-            await self._handle_dashboard_request(update=update, message=message)
+        if stripped_text in {self._BUTTON_GET_REPORTS, self._BUTTON_DASHBOARD_LEGACY}:
+            await self._notification_service.send_report_selector(
+                target_message=message,
+                reply_markup=self._build_report_selector_keyboard(
+                    self._dashboard_exporter.available_reports()
+                ),
+            )
             return
         if stripped_text == self._BUTTON_HELP:
             await self._notification_service.send_help(
@@ -554,14 +669,46 @@ class TelegramPollingHandler:
             reply_markup=self._build_main_menu_keyboard(),
         )
 
-    async def _handle_dashboard_request(self, *, update: Update, message) -> None:
+    async def _handle_dashboard_request(
+        self,
+        *,
+        update: Update,
+        message,
+        report_id: str,
+    ) -> None:
         chat_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
         user_id = str(update.effective_user.id) if update.effective_user else "unknown"
         message_id = str(message.message_id)
         trace_id = self._correlation_id_factory.build_trace_id(chat_id, message_id)
+        try:
+            report = self._dashboard_exporter.get_report(report_id)
+        except DashboardReportNotFoundError as exc:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    "report_id": report_id,
+                    "output_format": self._dashboard_exporter.output_format,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": "report_lookup",
+                },
+            )
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
         log_payload = {
-            "worksheet_name": self._dashboard_exporter.worksheet_name,
-            "export_range": self._dashboard_exporter.export_range,
+            "report_id": report.report_id,
+            "report_title": report.title,
+            "worksheet_name": report.worksheet_name,
+            "export_range": report.export_range,
             "output_format": self._dashboard_exporter.output_format,
         }
         log_context = LogContext(
@@ -578,171 +725,79 @@ class TelegramPollingHandler:
             context=log_context,
             payload=log_payload,
         )
-        await self._notification_service.send_dashboard_preparing(target_message=message)
+        await self._notification_service.send_dashboard_preparing(
+            target_message=message,
+            report_title=report.title,
+        )
 
         started_at = time.perf_counter()
         artifact: DashboardExportArtifact | None = None
+
+        def _log_failure(exc: Exception, failure_stage: str) -> None:
+            self._logging_service.error(
+                event=LogEvent.dashboard_export_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": failure_stage,
+                },
+            )
+
         try:
-            artifact = await asyncio.to_thread(self._dashboard_exporter.export_dashboard_preview)
+            artifact = await asyncio.to_thread(
+                self._dashboard_exporter.export_dashboard_preview,
+                report_id=report_id,
+            )
             try:
                 await self._notification_service.send_dashboard_preview(
                     target_message=message,
                     image_path=artifact.image_path,
+                    report_title=artifact.report_title,
                     worksheet_name=artifact.worksheet_name,
                     export_range=artifact.export_range,
+                    reply_markup=self._build_dashboard_pdf_keyboard(artifact.export_id),
                 )
             except Exception as exc:
-                self._logging_service.error(
-                    event=LogEvent.dashboard_export_failed,
-                    component="telegram_polling_handler",
-                    context=LogContext(
-                        trace_id=trace_id,
-                        chat_id=chat_id,
-                        user_id=user_id,
-                        message_id=message_id,
-                        processing_path="online",
-                        status="FAILED",
-                    ),
-                    payload={
-                        **log_payload,
-                        "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc),
-                        "failure_stage": "telegram_send",
-                    },
-                )
+                _log_failure(exc, "telegram_send")
                 await self._notification_service.send_dashboard_unavailable(target_message=message)
                 return
+        except DashboardReportNotFoundError as exc:
+            _log_failure(exc, "report_lookup")
+            await self._notification_service.send_dashboard_unavailable(target_message=message)
+            return
         except DashboardWorksheetNotFoundError as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "worksheet_lookup",
-                },
-            )
+            _log_failure(exc, "worksheet_lookup")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
         except DashboardPdfDownloadError as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "pdf_download",
-                },
-            )
+            _log_failure(exc, "pdf_download")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
         except DashboardPdfWriteError as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "pdf_write",
-                },
-            )
+            _log_failure(exc, "pdf_write")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
         except DashboardConversionError as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "jpeg_convert",
-                },
-            )
+            _log_failure(exc, "jpeg_convert")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
         except DashboardExportError as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "export",
-                },
-            )
+            _log_failure(exc, "export")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
         except Exception as exc:
-            self._logging_service.error(
-                event=LogEvent.dashboard_export_failed,
-                component="telegram_polling_handler",
-                context=LogContext(
-                    trace_id=trace_id,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    message_id=message_id,
-                    processing_path="online",
-                    status="FAILED",
-                ),
-                payload={
-                    **log_payload,
-                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "failure_stage": "unexpected",
-                },
-            )
+            _log_failure(exc, "unexpected")
             await self._notification_service.send_dashboard_unavailable(target_message=message)
             return
 
@@ -758,12 +813,141 @@ class TelegramPollingHandler:
                 status="SENT",
             ),
             payload={
-                **log_payload,
+                "report_id": artifact.report_id,
+                "report_title": artifact.report_title,
+                "worksheet_name": artifact.worksheet_name,
+                "export_range": artifact.export_range,
+                "output_format": artifact.output_format,
+                "export_id": artifact.export_id,
                 "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
                 "archive_dir": str(artifact.archive_dir),
                 "pdf_file_name": artifact.pdf_file_name,
                 "image_file_name": artifact.image_file_name,
             },
+        )
+
+    async def _handle_dashboard_pdf_request(
+        self,
+        *,
+        update: Update,
+        message,
+        export_id: str,
+    ) -> None:
+        chat_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        user_id = str(update.effective_user.id) if update.effective_user else "unknown"
+        message_id = str(message.message_id)
+        trace_id = self._correlation_id_factory.build_trace_id(chat_id, message_id)
+        log_payload = {"export_id": export_id}
+        started_at = time.perf_counter()
+
+        self._logging_service.info(
+            event=LogEvent.dashboard_pdf_requested,
+            component="telegram_polling_handler",
+            context=LogContext(
+                trace_id=trace_id,
+                chat_id=chat_id,
+                user_id=user_id,
+                message_id=message_id,
+                processing_path="online",
+                status="REQUESTED",
+            ),
+            payload=log_payload,
+        )
+
+        def _log_failure(exc: Exception, failure_stage: str) -> None:
+            self._logging_service.error(
+                event=LogEvent.dashboard_pdf_failed,
+                component="telegram_polling_handler",
+                context=LogContext(
+                    trace_id=trace_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                    processing_path="online",
+                    status="FAILED",
+                ),
+                payload={
+                    **log_payload,
+                    "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "failure_stage": failure_stage,
+                },
+            )
+
+        artifact: DashboardPdfArtifact | None = None
+        try:
+            artifact = await asyncio.to_thread(
+                self._dashboard_exporter.resolve_dashboard_pdf,
+                export_id=export_id,
+            )
+            try:
+                await self._notification_service.send_dashboard_pdf(
+                    target_message=message,
+                    pdf_path=artifact.pdf_path,
+                )
+            except Exception as exc:
+                _log_failure(exc, "telegram_send")
+                await self._notification_service.send_dashboard_pdf_unavailable(
+                    target_message=message,
+                )
+                await self._notification_service.send_welcome(
+                    target_message=message,
+                    reply_markup=self._build_main_menu_keyboard(),
+                )
+                return
+        except DashboardPdfNotFoundError as exc:
+            _log_failure(exc, "pdf_lookup")
+            await self._notification_service.send_dashboard_pdf_unavailable(
+                target_message=message,
+            )
+            await self._notification_service.send_welcome(
+                target_message=message,
+                reply_markup=self._build_main_menu_keyboard(),
+            )
+            return
+        except DashboardExportError as exc:
+            _log_failure(exc, "export")
+            await self._notification_service.send_dashboard_pdf_unavailable(
+                target_message=message,
+            )
+            await self._notification_service.send_welcome(
+                target_message=message,
+                reply_markup=self._build_main_menu_keyboard(),
+            )
+            return
+        except Exception as exc:
+            _log_failure(exc, "unexpected")
+            await self._notification_service.send_dashboard_pdf_unavailable(
+                target_message=message,
+            )
+            await self._notification_service.send_welcome(
+                target_message=message,
+                reply_markup=self._build_main_menu_keyboard(),
+            )
+            return
+
+        self._logging_service.info(
+            event=LogEvent.dashboard_pdf_sent,
+            component="telegram_polling_handler",
+            context=LogContext(
+                trace_id=trace_id,
+                chat_id=chat_id,
+                user_id=user_id,
+                message_id=message_id,
+                processing_path="online",
+                status="SENT",
+            ),
+            payload={
+                **log_payload,
+                "elapsed_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "archive_dir": str(artifact.archive_dir),
+                "pdf_file_name": artifact.pdf_file_name,
+            },
+        )
+        await self._notification_service.send_welcome(
+            target_message=message,
+            reply_markup=self._build_main_menu_keyboard(),
         )
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

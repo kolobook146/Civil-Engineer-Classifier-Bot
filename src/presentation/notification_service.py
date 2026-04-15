@@ -47,8 +47,8 @@ class NotificationService:
         self._correlation_id_factory = correlation_id_factory
         self._help_text = (
             "Use Report Progress to send one fact.\n"
-            "Use Dashboard to receive the latest dashboard preview.\n"
-            "Next: tap Report Progress or Dashboard."
+            "Use Get Reports to receive dashboard previews and optional PDFs.\n"
+            "Next: tap Report Progress or Get Reports."
         )
         self._input_instruction_text = (
             "Send one progress fact in a single message ⌨️\n"
@@ -60,7 +60,7 @@ class NotificationService:
         )
         self._welcome_text = (
             "Select an action.\n"
-            "Next: choose Report Progress, Dashboard, or Help."
+            "Next: choose Report Progress, Get Reports, or Help."
         )
 
     async def send_welcome(
@@ -142,29 +142,63 @@ class NotificationService:
     async def send_processing_error(self, *, target_message: Message) -> None:
         await target_message.reply_text("Could not process. Try again.")
 
-    async def send_dashboard_preparing(self, *, target_message: Message) -> None:
-        await target_message.reply_text("Preparing dashboard preview...")
+    async def send_report_selector(
+        self,
+        *,
+        target_message: Message,
+        reply_markup: InlineKeyboardMarkup,
+    ) -> None:
+        await target_message.reply_text(
+            "Choose a report to export.",
+            reply_markup=reply_markup,
+        )
+
+    async def send_dashboard_preparing(
+        self,
+        *,
+        target_message: Message,
+        report_title: str,
+    ) -> None:
+        await target_message.reply_text(f"Preparing {report_title} preview...")
 
     async def send_dashboard_unavailable(self, *, target_message: Message) -> None:
-        await target_message.reply_text("Could not prepare the dashboard preview. Try again.")
+        await target_message.reply_text("Could not prepare the selected report. Try again.")
 
     async def send_dashboard_preview(
         self,
         *,
         target_message: Message,
         image_path: Path,
+        report_title: str,
         worksheet_name: str,
         export_range: str,
+        reply_markup: InlineKeyboardMarkup,
     ) -> None:
         with image_path.open("rb") as image_stream:
             await target_message.reply_photo(
                 photo=image_stream,
                 caption=(
-                    f"Dashboard preview.\n"
-                    f"Sheet: {worksheet_name}\n"
-                    f"Range: {export_range}"
+                    f"{report_title} preview.\n"
+                    "Send PDF version?"
                 ),
+                reply_markup=reply_markup,
             )
+
+    async def send_dashboard_pdf(
+        self,
+        *,
+        target_message: Message,
+        pdf_path: Path,
+    ) -> None:
+        with pdf_path.open("rb") as pdf_stream:
+            await target_message.reply_document(
+                document=pdf_stream,
+                filename=pdf_path.name,
+                caption="PDF version.",
+            )
+
+    async def send_dashboard_pdf_unavailable(self, *, target_message: Message) -> None:
+        await target_message.reply_text("Could not send the PDF. Generate the report again.")
 
     async def send_queued_notice(self, *, target_message: Message) -> None:
         await target_message.reply_text("Queued. I'll send a confirmation card when ready.")

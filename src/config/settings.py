@@ -105,8 +105,6 @@ class GoogleSheetsSettings:
     service_account_file: Path
     spreadsheet_id: str
     worksheet_name: str
-    dashboard_worksheet_name: str
-    dashboard_export_range: str
     dashboard_archive_dir: Path
 
 
@@ -189,7 +187,7 @@ def load_settings() -> Settings:
         llm=LLMSettings(
             base_url=_get_env("LLM_BASE_URL", ""),
             api_key=_get_env("LLM_API_KEY", ""),
-            model=_get_env("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
+            model=_get_env("LLM_MODEL", "gemini-2.5-flash"),
             timeout_seconds=_get_int_env("LLM_TIMEOUT_SECONDS", 30),
             preflight_enabled=_get_bool_env("LLM_PREFLIGHT_ENABLED", True),
         ),
@@ -210,14 +208,6 @@ def load_settings() -> Settings:
             ),
             spreadsheet_id=_get_env("GOOGLE_SHEETS_SPREADSHEET_ID", ""),
             worksheet_name=_get_env("GOOGLE_SHEETS_WORKSHEET_NAME", "data_facts"),
-            dashboard_worksheet_name=_get_env(
-                "GOOGLE_SHEETS_DASHBOARD_WORKSHEET_NAME",
-                "dashboard_visual",
-            ),
-            dashboard_export_range=_get_env(
-                "GOOGLE_SHEETS_DASHBOARD_EXPORT_RANGE",
-                "A1:X38",
-            ),
             dashboard_archive_dir=Path(
                 _get_env(
                     "GOOGLE_SHEETS_DASHBOARD_ARCHIVE_DIR",

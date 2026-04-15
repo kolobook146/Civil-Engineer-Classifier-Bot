@@ -112,8 +112,15 @@ In the broader Stage 22 model, `function` is the pilot workstream vocabulary use
 - `function + stage` remains the minimum pilot business coordinate, but it now sits inside a broader schedule structure.
 - The pilot schedule workbook now uses separate `schedule_baseline` and `schedule_current` surfaces.
 - The live workbook now also includes a compact `dashboard_portfolio` sheet for executive portfolio reporting.
-- The live workbook also includes a `dashboard_visual` sheet that turns the compact portfolio dashboard into management-facing charts.
+- The live workbook also includes a `dashboard_visual` sheet that turns the compact portfolio dashboard into management-facing charts, including a pilot `12M Funding Need vs Funding Sources` area chart backed by hidden `funding_helper`.
 - The portfolio dashboard includes a compact earned value analysis (`BAC`, `PV`, `EV`, `AC`, `CV`, `SV`, `CPI`, `SPI`, `EAC`, `VAC`) based on schedule cost fields.
+- The live workbook now also includes a hidden `reporting_helper` layer plus three visible A4 reporting sheets:
+  `company_overview_a4`, `monthly_controls_a4`, and `departments_a4`.
+- Those A4 sheets do not read `data_facts` directly; they read the controlled schedule surfaces after facts have already been reflected into `schedule_current`.
+- The funding visual also avoids direct `data_facts` reads: `Funding Need M` is a monthly, non-cumulative model-derived demand curve from `schedule_current`, built by summing daily task cost allocations inside each month; `Funding Sources M` is synthetic pilot data until a real financing schedule is introduced.
+- Time-phased reporting uses `PV` (planned value as of `Status Date`) rather than raw `BAC / Total Planned Cost` as the main plan comparator.
+- The `company_overview_a4` schedule signal treats delayed tasks as a union of delayed starts and delayed finishes against baseline dates, without double-counting the same task.
+- The `departments_a4` sheet is now a responsibility / workstream accountability dashboard with a hidden `departments_helper` layer, planned-vs-current department progress with `Delta pp`, department EVA exposure, stage heatmap, delay signal, and an attention chart combining delayed task count with delayed planned-cost exposure.
 - The first baseline implementation is assembled as one full residential high-rise template project `P01`, after which additional projects are cloned and time-shifted into `P02-P07`.
 - `schedule_baseline` may store planned `% complete` and derived `Status` as of the sheet `Status Date` for actionable non-`wbs` rows.
 - `wbs` rows stay blank for pilot `% complete`, `Status`, and `Planned Cost`.

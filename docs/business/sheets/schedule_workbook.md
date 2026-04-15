@@ -190,13 +190,167 @@ Business role:
 
 - turns compact dashboard tables into management-facing charts;
 - highlights portfolio progress and cost-control signals visually;
+- adds a pilot `12M Funding Need vs Funding Sources` area chart for forward-looking
+  financing visibility;
 - keeps the visual layer separate from the calculation layer.
 
 Pilot design notes:
 
 - it uses a small set of high-signal charts instead of many decorative visuals;
 - preferred visuals are project-progress comparison, EVA cost comparison by project, and phase cost comparison;
+- the funding chart is a model-derived monthly funding-demand view, not an accounting
+  cash-flow ledger;
+- `Funding Need M` is calculated from `schedule_current` forecast windows by spreading
+  each actionable row's cost basis evenly across `Forecast Start` - `Forecast Finish`,
+  falling back to planned dates where forecast dates are blank, and then summing those
+  daily allocations into 12 monthly points;
+- the pilot cost basis is `Actual Cost` when available and `Planned Cost` otherwise,
+  so the 12-month curve remains useful before full future actual-cost evidence exists;
+- `Funding Sources M` is synthetic pilot data and must be replaced by a real loan
+  drawdown / treasury / financing schedule in production;
 - a true time-phased EVA S-curve is intentionally deferred because the pilot workbook stores current snapshot actuals, not a historical periodized actual-cost ledger.
+
+### `funding_helper`
+
+Hidden helper sheet for the `dashboard_visual` funding area chart.
+
+Business role:
+
+- creates a 12-month horizon from the workbook `Status Date`;
+- calculates `Funding Need M` as monthly, non-cumulative portfolio funding demand by
+  summing daily row-level allocations inside each month;
+- creates a deterministic synthetic `Funding Sources M` line for pilot visual contrast;
+- calculates `Funding Gap M` as `Funding Sources M - Funding Need M`.
+
+Pilot design notes:
+
+- the helper reads `schedule_current` only and does not read `data_facts` directly;
+- `Funding Sources M` is intentionally synthetic and should not be interpreted as bank
+  commitment, approved drawdown, or treasury fact;
+- the production replacement should connect this view to a controlled financing-source
+  register.
+
+### `reporting_helper`
+
+Hidden reporting-calculation layer built on top of:
+
+- `schedule_baseline`
+- `schedule_current`
+- `schedule_meta`
+
+Business role:
+
+- normalizes row-level reporting coordinates for downstream A4 reporting sheets;
+- derives time-phased planned value (`PV Row`) from `Planned Cost`, `Planned Start`, `Planned Finish`, and sheet `Status Date`;
+- derives earned value (`EV Row`) from baseline cost and current `% complete`;
+- derives delay/ahead analytics from actual-or-forecast finish against planned finish;
+- derives baseline start/finish delay flags for the executive schedule signal:
+  `Late Start Flag`, `Late Finish Flag`, `Delayed Task Flag`, `Start Delay Days`,
+  `Finish Delay Days`, and `Schedule Delay Days`;
+- provides one bounded extraction layer so visible reporting sheets do not read `data_facts` directly.
+
+Pilot design notes:
+
+- `reporting_helper` is a hidden helper surface, not an editing surface and not a third schedule register;
+- the helper is the accepted bridge between the schedule-control layer and presentation-layer reporting;
+- plan-fact cost analytics in downstream reports must use `PV` rather than raw `BAC / Total Planned Cost`.
+
+### `company_overview_a4`
+
+Executive A4 portfolio sheet built on top of:
+
+- `reporting_helper`
+- `schedule_baseline`
+- `schedule_current`
+- `schedule_meta`
+
+Business role:
+
+- provides one company-level executive dashboard for the live control date;
+- combines portfolio progress, EVA, delay analytics, project health, and a compact investor-style ribbon;
+- keeps the main reporting language aligned with integrated project controls rather than external investor reporting.
+
+Pilot design notes:
+
+- this sheet is executive-first and uses investor-style metrics only as a secondary polish layer;
+- cost comparison is read as `PV / EV / AC`;
+- `BAC` remains visible as a secondary seriousness metric, not as the main plan-to-date comparator;
+- the top `Delayed Tasks` KPI and the `Schedule Signal` block use the same delayed-task union:
+  `Late Start OR Late Finish`, with each task counted once;
+- `Late Start` means baseline `Planned Start < Status Date` and current `Actual Start` is blank;
+- `Late Finish` means baseline `Planned Finish < Status Date` and current `Actual Finish` is blank;
+- the `Task Schedule Signal` donut uses mutually exclusive categories:
+  `On track / not due`, `Late start only`, and `Late finish`, where late finish is the more critical bucket for overlapping start/finish delays.
+
+### `monthly_controls_a4`
+
+One-page monthly PMO controls pack built on top of:
+
+- `reporting_helper`
+- `schedule_baseline`
+- `schedule_current`
+- `schedule_meta`
+
+Business role:
+
+- provides the canonical monthly controls view for the pilot;
+- summarizes schedule movement, milestones, EVA, exception pressure, operational watch items, and current-state impact;
+- reads live current-state movement only after facts have already been reflected into `schedule_current`.
+
+Pilot design notes:
+
+- the sheet is portfolio-wide and reporting-oriented rather than project-drilldown-oriented;
+- the main cost block compares `PV`, `EV`, and `AC`, not `BAC` versus `AC`;
+- ahead/delay analytics reuse the same variance-day logic as the other A4 reporting sheets.
+
+### `departments_a4`
+
+Department and responsibility-bucket A4 control sheet built on top of:
+
+- `departments_helper`
+- `reporting_helper`
+- `schedule_current`
+- `schedule_meta`
+
+Business role:
+
+- groups live control status by `Responsible` buckets;
+- highlights department progress, cost/progress comparison, delay concentration, and a stage heatmap;
+- gives PMO-style accountability visibility without dropping to person-level ownership.
+
+Pilot design notes:
+
+- the main grouping coordinate is `Responsible`, not project manager name or user account;
+- `Department Performance Scoreboard` shows `Planned %`, `Current %`, and `Delta pp` so each responsibility bucket can be read as plan-versus-current progress and immediate progress gap;
+- stage visibility is shown as a heatmap because it reads faster than long ranked tables on A4 and gives more operational detail than phase buckets;
+- cost comparison uses `PV`, `EV`, and `AC` semantics inherited from `reporting_helper`;
+- department delay uses the same baseline start/finish logic as `company_overview_a4`:
+  `Late Start OR Late Finish`, counted once per task;
+- the sheet includes a hidden `departments_helper` surface to keep the A4 page readable while preserving formula traceability;
+- the primary visual blocks are `Department Performance Scoreboard`, `Responsible x Stage Progress Heatmap`, `Department EVA / Cost Exposure`, `Department Delay Signal`, and chart-based `Departments Requiring Attention`;
+- `Departments Requiring Attention` combines `Delayed Tasks` with `Delayed Cost Exposure M`, where delayed cost exposure is the sum of `BAC Row / Planned Cost` for delayed tasks and is used as a management-risk exposure signal, not as actual cost or `PV`.
+
+### `departments_helper`
+
+Hidden reporting-calculation layer built on top of:
+
+- `reporting_helper`
+
+Business role:
+
+- aggregates row-level schedule reporting metrics by `Responsible`;
+- calculates responsibility-level `PV`, `EV`, `AC`, `SPI`, `CPI`, planned progress, current progress, progress delta, health, and main driver;
+- derives responsibility-level `Planned %` as the planned progress implied by current progress and `SPI`, equivalent to a planned-value-to-budget reading for the bucket;
+- separates `Late start only` and `Late finish` for the department delay chart while preserving no-double-count `Delayed Tasks`;
+- prepares the `Responsible x Stage Progress Heatmap` by aggregating `EV Row / BAC Row` by `Responsible` and `Stage`;
+- prepares top-N chart tables for cost exposure, delay signal, and attention ranking;
+- derives `Delayed Cost Exposure M` for the attention chart as `sum(BAC Row)` over rows where `Delayed Task Flag = 1`, grouped by `Responsible`.
+
+Pilot design notes:
+
+- `departments_helper` is not an editing surface;
+- `Responsible` remains a controlled responsibility bucket, not a person or user account;
+- any missing `Responsible` values should be surfaced as an accountability problem rather than silently dropped from the dashboard.
 
 ### `README`
 
@@ -209,6 +363,22 @@ It should explain:
 - how baseline publication works;
 - how dashboards should compare baseline and current values;
 - which fields are manual and which are calculated.
+
+## Reporting Cost Semantics
+
+The pilot workbook uses three distinct reporting cost coordinates:
+
+- `BAC`
+  Total planned cost for the selected reporting slice.
+- `PV`
+  Time-phased planned value as of the sheet `Status Date`.
+- `AC`
+  Current actual-cost proxy from `schedule_current`.
+
+Accepted reporting rule:
+
+- executive and monthly plan-fact reporting compares `PV` versus `EV` versus `AC`;
+- raw `BAC` is a total-budget reference only and must not be treated as planned-to-date cost.
 
 ## Version Semantics
 
