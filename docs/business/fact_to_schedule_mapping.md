@@ -83,6 +83,34 @@ This means:
 This is an accepted pilot limitation.
 It is suitable for the current pilot because it is simple, transparent, and reversible, but it is not a strong mature-state matching model.
 
+## Formula-Fed Fact Verification
+
+The workbook also calculates a lightweight `data_facts.verification` signal.
+
+Verification uses the same four-field pilot coordinate as the formula-fed quantity
+branch:
+
+- `stage`
+- `function`
+- `work_type`
+- `unit`
+
+A fact is `verified` only when:
+
+- the four-field key exists in an eligible formula-fed `schedule_current` row;
+- cumulative `data_facts.volume` for that key is less than or equal to the available
+  schedule capacity.
+
+Available capacity is calculated from the eligible current-schedule rows:
+
+- physical quantity rows contribute their `Planned Quantity`;
+- non-physical rows without planned quantity contribute `1`, matching the bot convention
+  that `volume = 1` is a binary completion marker.
+
+A fact is `not verified` when no eligible schedule row exists or when cumulative volume
+for the same key exceeds capacity. This is a review signal, not a rejection of the
+original evidence.
+
 ## Mapping Outcomes
 
 | Outcome | Meaning | Typical result |

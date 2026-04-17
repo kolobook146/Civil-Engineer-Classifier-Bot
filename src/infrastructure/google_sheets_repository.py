@@ -33,6 +33,7 @@ _DEFAULT_COLUMNS: Final[tuple[str, ...]] = (
     "model",
     "classifier_version",
     "status",
+    "verification",
 )
 _LEGACY_HEADER_ALIASES: Final[dict[str, str]] = {
     "workType": "work_type",
@@ -193,7 +194,20 @@ class GoogleSheetsRepository:
             "model": audit.model,
             "classifier_version": audit.classifier_version,
             "status": audit.status.value,
+            "verification": GoogleSheetsRepository._verification_formula(),
         }
+
+    @staticmethod
+    def _verification_formula() -> str:
+        return (
+            '=IF(INDEX($A:$A,ROW())="","",'
+            "LET("
+            'key,INDEX($E:$E,ROW())&" | "&INDEX($F:$F,ROW())&" | "&INDEX($D:$D,ROW())&" | "&INDEX($C:$C,ROW()),'
+            "matched,IFERROR(VLOOKUP(key,fact_verification_helper!$A:$C,2,FALSE),0),"
+            "capacity,IFERROR(VLOOKUP(key,fact_verification_helper!$A:$C,3,FALSE),0),"
+            "cumulative,SUMIFS($B:$B,$E:$E,INDEX($E:$E,ROW()),$F:$F,INDEX($F:$F,ROW()),$D:$D,INDEX($D:$D,ROW()),$C:$C,INDEX($C:$C,ROW())),"
+            'IF(OR(matched=0,cumulative>capacity),"not verified","verified")))'
+        )
 
     @staticmethod
     def _format_volume(value: Decimal | None) -> str:
@@ -213,7 +227,7 @@ class GoogleSheetsRepository:
         if not updated_range:
             return None
 
-        # Example: "data_facts!A152:N152"
+        # Example: "data_facts!A152:O152"
         tail = updated_range.split("!")[-1]
         match = re.search(r"[A-Z]+(\d+)(?::[A-Z]+(\d+))?$", tail)
         if match is None:

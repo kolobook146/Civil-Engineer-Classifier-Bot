@@ -22,6 +22,7 @@ The `data_facts` sheet stores confirmed progress facts reported through the bot.
 12. `model`
 13. `classifier_version`
 14. `status`
+15. `verification`
 
 ## Business Meaning of Columns
 
@@ -39,6 +40,7 @@ The `data_facts` sheet stores confirmed progress facts reported through the bot.
 - `model`: LLM model used for extraction.
 - `classifier_version`: classifier version identifier.
 - `status`: processing state of the fact.
+- `verification`: workbook-level business verification result, either `verified` or `not verified`.
 
 ## Business Role of This Sheet
 
@@ -54,3 +56,26 @@ For the current workbook pilot:
 - `timestamp` remains the persisted fact time and is used by the workbook as the source of:
   - earliest matching fact date for `Actual Start`;
   - latest matching fact date for `Actual Finish` once the row is complete.
+
+## Verification Convention
+
+`verification` is not the same as `status`.
+
+- `status` is the technical processing state of the fact pipeline.
+- `verification` is the business check against the current schedule model.
+
+In the pilot workbook, `verification` is calculated from a hidden helper sheet
+`fact_verification_helper`:
+
+- facts are matched to formula-fed `schedule_current` rows by
+  `stage + function + work_type + unit`;
+- if no eligible `schedule_current` row exists, the fact is `not verified`;
+- if cumulative `volume` for that same four-field key exceeds available schedule
+  capacity, all facts for that key are `not verified`;
+- otherwise the fact is `verified`.
+
+For physical quantity rows, capacity is the summed `Planned Quantity` of eligible
+schedule rows. For non-physical rows without planned quantity, capacity is the count
+of eligible rows because the bot writes `volume = 1` as a binary completion marker.
+
+This is a pilot verification signal, not a full approval workflow.

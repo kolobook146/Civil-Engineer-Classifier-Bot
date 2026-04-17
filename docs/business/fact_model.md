@@ -58,6 +58,7 @@ The current pilot persists the following fields in `data_facts`:
 - `model`
 - `classifier_version`
 - `status`
+- `verification`
 
 This is the current evidence-sheet representation.
 It remains valid in Stage 22.
@@ -141,6 +142,20 @@ Facts move through operational states such as:
 
 These are not schedule statuses.
 They are evidence-processing statuses.
+
+The workbook may also calculate `verification`.
+This is a business verification signal, not a processing state.
+It checks whether a persisted fact can be matched to an eligible current-schedule
+collection row and whether cumulative reported volume stays within the available
+schedule capacity for the same `stage + function + work_type + unit` key.
+
+Current values:
+
+- `verified`
+- `not verified`
+
+`not verified` means the fact should not be trusted as automatically consumable
+schedule progress without review. It does not mean the original human report is false.
 
 ## Relationship to the Schedule Model
 
