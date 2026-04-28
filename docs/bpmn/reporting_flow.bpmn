@@ -236,7 +236,7 @@
     <bpmn:sequenceFlow id="Flow_55" sourceRef="Store_MarkQueueDone" targetRef="Gateway_ConfirmationAction"/>
 
     <bpmn:textAnnotation id="TextAnnotation_RuntimeAndUXNotes">
-      <bpmn:text>Runtime notes: online ingress can run through main_polling.py or main_webhook.py; both entrypoints execute startup_preflight and use the same TelegramPollingHandler. Auxiliary lightweight UI branches (Help, Show Example, input cancel, Main Menu, Report Another) are intentionally omitted from the primary BPMN path for readability.</bpmn:text>
+      <bpmn:text>Runtime notes: online ingress can run through main_polling.py or main_webhook.py; both entrypoints use the same TelegramPollingHandler. `startup_preflight` exists as an optional blocking bootstrap step and runs only when `STARTUP_PREFLIGHT_ENABLED=true`. Auxiliary lightweight UI branches (Help, Show Example, input cancel, Main Menu, Report Another) are intentionally omitted from the primary BPMN path for readability.</bpmn:text>
     </bpmn:textAnnotation>
     <bpmn:textAnnotation id="TextAnnotation_ProcessingNotes">
       <bpmn:text>Processing notes: raw_text is always preserved inside the pending confirmation record and later in data_facts. Online and deferred paths both classify -> normalize -> validate -> map valid/fallback -> create a pending confirmation. Google Sheets write happens only after explicit user confirmation. If save fails on Confirm, the pending draft is intentionally kept so the user can retry. Queue requeue persists attempt_count and next_attempt_at with bounded backoff and jitter.</bpmn:text>

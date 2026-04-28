@@ -20,6 +20,11 @@ class _PhotoCall:
 class _DummyMessage:
     def __init__(self) -> None:
         self.photo_calls: list[_PhotoCall] = []
+        self.text_calls: list[str] = []
+
+    async def reply_text(self, text: str, **kwargs) -> None:
+        del kwargs
+        self.text_calls.append(text)
 
     async def reply_photo(
         self,
@@ -60,3 +65,21 @@ async def test_dashboard_preview_caption_hides_sheet_and_range(tmp_path: Path) -
     assert "Sheet:" not in target_message.photo_calls[0].caption
     assert "Range:" not in target_message.photo_calls[0].caption
     assert target_message.photo_calls[0].reply_markup is reply_markup
+
+
+@pytest.mark.asyncio
+async def test_processing_error_explains_gemini_overload() -> None:
+    target_message = _DummyMessage()
+    service = NotificationService(
+        logging_service=LoggingService([]),
+        correlation_id_factory=CorrelationIdFactory(),
+    )
+
+    await service.send_processing_error(
+        target_message=target_message,
+        reason="model_overloaded",
+    )
+
+    assert target_message.text_calls == [
+        "Gemini is temporarily overloaded. Please try again in a minute."
+    ]

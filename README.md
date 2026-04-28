@@ -1,16 +1,19 @@
 # Civil Engineer's Classifier Bot
 
-A Telegram bot (@TavridaDevelopmentBot) that classifies any free-form project update into a strict, predefined lifecycle schedule structure for an investment construction project, based on a selected coding framework, and writes the data to Google Sheets.
+Telegram bot:  
+https://t.me/TavridaDevelopmentBot
 
-Google Sheets reference (pilot data dictionary):  
+Live Google Sheets workbook and dashboards:  
 https://docs.google.com/spreadsheets/d/17AASCMKd6DtSUjoheuF1MrPVm6iSzBHq--p7Rc4jd1s/edit?usp=sharing
 
-For the pilot, the baseline structure is built around three top-level coding groups:
-- Functions: typical functions required to deliver a project (Financing, Marketing, Design, Construction).
-- Stages: standardized stages used to produce results within each function (Terms of Reference, Tender, Contract, Procurement, Execution).
-- Work Types: first-level classification of construction and installation work types (Earthworks, Piling, Concreting, Electrical Installation Works, Landscaping, etc.).
+A Telegram bot and Google Sheets pilot that turns free-form construction progress messages into verified schedule intelligence for an investment-construction portfolio.
 
-This structure enables end-to-end analytics, cost control across project delivery, operational planning, and comparison of alternative development scenarios for management decision-making.
+The core business idea is a three-dimensional semantic control model:
+- `Function`: business workstream.
+- `Stage`: lifecycle position inside the workstream.
+- `Work Type`: scope detail.
+
+Together with `Unit`, `Volume`, `Date`, and project context, this coordinate lets a field fact flow into `data_facts`, pass workbook-level verification, update eligible rows in `schedule_current`, and feed executive dashboards without corrupting `schedule_baseline`.
 
 ## 1. Project Goal
 
@@ -18,7 +21,9 @@ Build a pilot system that:
 - accepts user messages about completed work in free-form text;
 - extracts structured fields based on project dictionaries;
 - stores both structured data and the original message text;
-- asks the user for confirmation before writing to Google Sheets, including post-factum after queued processing.
+- asks the user for confirmation before writing to Google Sheets, including post-factum after queued processing;
+- uses the workbook to verify facts against the current schedule model;
+- exposes portfolio reporting through A4 dashboard sheets and bot-exported previews.
 
 ## 2. Pilot Scope
 
@@ -28,6 +33,9 @@ In scope for the pilot:
 - strict JSON validation of the LLM output before persistence;
 - fallback logic for invalid JSON;
 - writing data to Google Sheets (`data_facts`) only after explicit user confirmation;
+- workbook-calculated `data_facts.verification` based on eligible `schedule_current` rows and cumulative volume capacity;
+- separate `schedule_baseline` and `schedule_current` workbook surfaces, with the active pilot portfolio covering `P01-P07`;
+- formula-fed actual progress in `schedule_current` for assigned open rows, using the pilot coordinate `Stage + Function + Work Type + Unit`;
 - a deferred-processing queue with bounded retry/backoff (`1/5/15 minutes` with jitter);
 - on-demand report export for three dashboard sheets to a local archive (`PDF + JPEG`), with JPEG preview and optional PDF delivery in Telegram;
 - post-factum confirmation cards for queued messages.
@@ -37,7 +45,9 @@ Out of scope for the pilot (post-pilot):
 - DLQ / parking flow for non-recoverable queue tasks;
 - logging of confidence values and reasons for empty fields;
 - operational monitoring (timeouts, queue size, persistence errors);
-- dictionary schema expansion to `code`, `label`, `description` (currently only `label` is used).
+- dictionary schema expansion to `code`, `label`, `description` (currently only `label` is used);
+- full approval workflow for fact verification;
+- production financing-source register for real loan drawdown / treasury schedules.
 
 ## 3. Functional Requirements
 
@@ -101,9 +111,36 @@ Data is written to the `data_facts` sheet and always includes:
   - `model`,
   - `classifier_version`,
   - `status`.
+- workbook-calculated field:
+  - `verification`.
 - Online and queued records are written only after explicit user confirmation.
+- `verification` is a business verification signal (`verified` / `not verified`), not a replacement for technical processing `status`.
 
-### 3.6 Queue and Deferred Processing
+### 3.6 Workbook Schedule and Dashboard Logic
+
+The workbook is part of the implemented pilot logic, not just a passive storage file.
+
+- `data_facts` is the immutable evidence register written by the bot after user confirmation.
+- `schedule_baseline` is the governed comparison surface.
+- `schedule_current` is the operational schedule twin.
+- `schedule_meta` stores live `Status Date = TODAY()` for both schedule surfaces.
+- The active portfolio uses project-banded `Task ID` ranges for `P01-P07` (`T1xxxx` to `T7xxxx`).
+- `Phase` is a manual dictionary-backed portfolio coordinate on schedule rows and does not replace `Stage`.
+- `fact_collection_map` assigns each template task to no more than one project clone for formula-fed fact collection.
+- For physical rows, `Actual Quantity` may aggregate measured `data_facts.volume`.
+- For non-physical pilot rows, the bot convention is `volume = 1` as a binary progress/completion signal.
+- Open formula-fed rows may derive `Actual Start` from the earliest matching fact date and `Actual Finish` from the latest matching fact date after the completion rule is met.
+- Quantity-driven `Actual Cost` uses the pilot proportional formula `ROUND(Actual Quantity / Planned Quantity * Planned Cost, 2)`.
+- `data_facts.verification` is calculated from the same four-field coordinate and cumulative capacity in eligible `schedule_current` rows.
+- Dashboard sheets read the controlled schedule surfaces, not raw `data_facts` directly.
+
+The main visible reporting surfaces are:
+
+- `dashboard_visual`: executive visual dashboard with portfolio progress, EVA / cost-control signals, schedule signal, and a pilot 12-month funding need / sources chart.
+- `monthly_controls_a4`: monthly PMO controls pack.
+- `departments_a4`: responsibility / workstream accountability dashboard.
+
+### 3.7 Queue and Deferred Processing
 
 If the LLM does not respond within 30 seconds:
 1. The message is queued with status `QUEUED`.
@@ -114,7 +151,7 @@ If the LLM does not respond within 30 seconds:
 5. Google Sheets write happens only after the user explicitly confirms that card.
 6. If queued processing fails, the task is retried with bounded backoff (`1/5/15 minutes` with jitter).
 
-### 3.7 Report Preview Export
+### 3.8 Report Preview Export
 
 - The bot exposes an on-demand `Get Reports` menu action.
 - `Get Reports` opens an inline selector with three pilot reports:
@@ -131,6 +168,7 @@ If the LLM does not respond within 30 seconds:
 - Successful exports are archived locally in `var/dashboard_exports/` by default.
 - Archive retention in v1 is unlimited; files are not auto-pruned.
 - This is a read-only reporting path and does not mutate the workbook.
+- Dashboard values change through `schedule_current` after facts are confirmed and consumed by workbook formulas.
 
 ## 4. Non-Functional Requirements
 
@@ -151,6 +189,8 @@ If the LLM does not respond within 30 seconds:
 - Strict JSON validation before persistence.
 - `unit` and `workType` must be single-value (`one value or null`) and must belong to their dictionaries.
 - `stage` and `function` must be single-value, non-null, and must belong to their dictionaries.
+- `verification` marks whether a persisted fact is consumable by the current schedule model and within cumulative volume capacity.
+- `verification = not verified` is a review signal; the original evidence remains preserved in `data_facts`.
 
 ### 4.4 Maintainability
 
@@ -189,7 +229,7 @@ If the LLM does not respond within 30 seconds:
 - No roles or access control.
 - No edit/cancel flow for previously recorded entries.
 - No deduplication by `chat_id + message_id`.
-- Unit aliases normalization is still out of scope (verification is done against the units dictionary).
+- Unit canonicalization is limited to known dictionary aliases; full unit conversion remains out of scope.
 - `volume` is stored as `Decimal` in the domain model and persisted as normalized decimal text in Google Sheets.
 - Report JPEG previews in v1 rely on macOS `sips` for PDF-to-image conversion on the bot host.
 - Report exports are archived as runtime files in `var/dashboard_exports/` and are not auto-cleaned in v1.
@@ -210,6 +250,9 @@ If the LLM does not respond within 30 seconds:
 - UML Activity: `docs/uml/reporting_activity.puml`
 - UML Class: `docs/uml/reporting_class_diagram.puml`
 - Logging spec: `docs/logging/logging_spec.md`
+- Business model: `docs/business/README.md`
+- Schedule workbook rules: `docs/business/sheets/schedule_workbook.md`
+- Fact-to-schedule mapping: `docs/business/fact_to_schedule_mapping.md`
 
 ## 10. Pilot Acceptance Criteria
 
@@ -219,8 +262,9 @@ If the LLM does not respond within 30 seconds:
 4. With invalid JSON, raw LLM output is written to `comment`.
 5. On a 30-second timeout, the message is queued and later processed with bounded retry/backoff.
 6. After queue processing, the user receives a post-factum confirmation card before any Google Sheets write.
-7. On `Get Reports`, the user can choose one of three reports and receive a JPEG preview.
-8. After receiving a JPEG preview, the user can request the matching archived PDF via `Get PDF`.
+7. Persisted facts include a row-local `verification` formula in `data_facts`.
+8. On `Get Reports`, the user can choose one of three reports and receive a JPEG preview.
+9. After receiving a JPEG preview, the user can request the matching archived PDF via `Get PDF`.
 
 ## 11. Run Process
 
@@ -254,6 +298,7 @@ cp .env.example .env
 - `GOOGLE_SHEETS_SPREADSHEET_ID`
 
 Optional report export override:
+- `STARTUP_PREFLIGHT_ENABLED` (`false` for pilot runtime, `true` before production rollout)
 - `GOOGLE_SHEETS_DASHBOARD_ARCHIVE_DIR` (default `var/dashboard_exports`)
 - `GOOGLE_SHEETS_SPREADSHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_FILE`

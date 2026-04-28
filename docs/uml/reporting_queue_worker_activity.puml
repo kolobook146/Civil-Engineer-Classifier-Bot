@@ -5,7 +5,7 @@ start
 
 partition QueueWorkerProcess {
   :Log event queue_worker_bootstrap_started;
-  :Run startup preflight for queue path;
+  :Optional startup preflight for queue path\n(only if STARTUP_PREFLIGHT_ENABLED=true);
   :Log event queue_worker_started;
   :Polling tick (QUEUE_POLL_INTERVAL_SECONDS);
   :Dequeue oldest due queue task;

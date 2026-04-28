@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from typing import Literal
 
 from telegram import (
     InlineKeyboardButton,
@@ -517,7 +518,10 @@ class TelegramPollingHandler:
                     "error_message": str(exc),
                 },
             )
-            await self._notification_service.send_processing_error(target_message=message)
+            await self._notification_service.send_processing_error(
+                target_message=message,
+                reason=self._processing_error_reason(exc),
+            )
             return
 
         try:
@@ -979,6 +983,15 @@ class TelegramPollingHandler:
             return None
         confirmation_id = data[len(prefix):].strip()
         return confirmation_id or None
+
+    @staticmethod
+    def _processing_error_reason(exc: Exception) -> Literal["model_overloaded"] | None:
+        message = str(exc)
+        if "503 UNAVAILABLE" in message or (
+            "UNAVAILABLE" in message and "high demand" in message
+        ):
+            return "model_overloaded"
+        return None
 
     @staticmethod
     async def _safe_clear_inline_markup(query) -> None:

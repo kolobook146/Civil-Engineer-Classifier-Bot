@@ -22,6 +22,7 @@ package "Config" {
   class AppSettings {
     +env: str
     +classifier_version: str
+    +startup_preflight_enabled: bool
   }
 
   class TelegramSettings {
@@ -61,6 +62,7 @@ package "Config" {
     +service_account_file: Path
     +spreadsheet_id: str
     +worksheet_name: str
+    +dashboard_archive_dir: Path
   }
 
   class QueueSettings {

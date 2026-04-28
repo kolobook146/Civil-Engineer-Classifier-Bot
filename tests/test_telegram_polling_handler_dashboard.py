@@ -183,6 +183,14 @@ def _build_update(*, message=None, callback_query=None):
     )
 
 
+def test_processing_error_reason_detects_gemini_overload() -> None:
+    exc = Exception(
+        "503 UNAVAILABLE. This model is currently experiencing high demand."
+    )
+
+    assert TelegramPollingHandler._processing_error_reason(exc) == "model_overloaded"
+
+
 @pytest.mark.asyncio
 async def test_get_reports_button_sends_report_selector() -> None:
     notification_service = _NotificationStub()

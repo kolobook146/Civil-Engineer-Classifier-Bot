@@ -98,24 +98,25 @@ def main() -> None:
 
     logging_service = configure_logging(settings)
     correlation_id_factory = CorrelationIdFactory()
-    StartupPreflight(
-        dictionary_repository=DictionaryRepository(settings.dictionaries),
-        gemini_client=GeminiClient(
-            api_key=settings.llm.api_key,
-            model=settings.llm.model,
-            timeout_seconds=settings.llm.timeout_seconds,
-            base_url=settings.llm.base_url,
-        ),
-        google_sheets_repository=GoogleSheetsRepository(
-            settings.google_sheets,
+    if settings.app.startup_preflight_enabled:
+        StartupPreflight(
+            dictionary_repository=DictionaryRepository(settings.dictionaries),
+            gemini_client=GeminiClient(
+                api_key=settings.llm.api_key,
+                model=settings.llm.model,
+                timeout_seconds=settings.llm.timeout_seconds,
+                base_url=settings.llm.base_url,
+            ),
+            google_sheets_repository=GoogleSheetsRepository(
+                settings.google_sheets,
+                logging_service=logging_service,
+                correlation_id_factory=correlation_id_factory,
+            ),
             logging_service=logging_service,
-            correlation_id_factory=correlation_id_factory,
-        ),
-        logging_service=logging_service,
-        processing_path="online",
-        llm_timeout_seconds=settings.llm.timeout_seconds,
-        llm_preflight_enabled=settings.llm.preflight_enabled,
-    ).run()
+            processing_path="online",
+            llm_timeout_seconds=settings.llm.timeout_seconds,
+            llm_preflight_enabled=settings.llm.preflight_enabled,
+        ).run()
     application = build_application(
         settings,
         logging_service=logging_service,

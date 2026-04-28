@@ -61,6 +61,7 @@ def _parse_allowed_updates(raw: str) -> list[str] | None:
 class AppSettings:
     env: str
     classifier_version: str
+    startup_preflight_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,7 @@ def load_settings() -> Settings:
         app=AppSettings(
             env=_get_env("APP_ENV", "dev"),
             classifier_version=_get_env("CLASSIFIER_VERSION", "pilot-v1"),
+            startup_preflight_enabled=_get_bool_env("STARTUP_PREFLIGHT_ENABLED", False),
         ),
         telegram=TelegramSettings(
             bot_token=_get_env("TG_BOT_TOKEN", ""),

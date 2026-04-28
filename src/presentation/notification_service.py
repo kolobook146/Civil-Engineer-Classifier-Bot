@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from telegram import (
     Bot,
@@ -139,7 +140,18 @@ class NotificationService:
             reply_markup=reply_markup,
         )
 
-    async def send_processing_error(self, *, target_message: Message) -> None:
+    async def send_processing_error(
+        self,
+        *,
+        target_message: Message,
+        reason: Literal["model_overloaded"] | None = None,
+    ) -> None:
+        if reason == "model_overloaded":
+            await target_message.reply_text(
+                "Gemini is temporarily overloaded. Please try again in a minute."
+            )
+            return
+
         await target_message.reply_text("Could not process. Try again.")
 
     async def send_report_selector(
